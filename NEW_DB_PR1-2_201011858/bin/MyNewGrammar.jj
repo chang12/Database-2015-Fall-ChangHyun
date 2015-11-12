@@ -48,7 +48,7 @@ public class SimpleDBMSParser
 	dbConfig = new DatabaseConfig();
     dbConfig.setAllowCreate(true);
     dbConfig.setSortedDuplicates(true);
-    myDatabase = myDbEnvironment.openDatabase(null, "sampleDatabase", dbConfig);
+//    myDatabase = myDbEnvironment.openDatabase(null, "sampleDatabase", dbConfig);
     
     SimpleDBMSParser parser = new SimpleDBMSParser(System.in);
 
@@ -77,19 +77,19 @@ public class SimpleDBMSParser
       case PRINT_CREATE_TABLE:
       	if(errorMsg=="")      	{      	  System.out.println("\'"+currentTableName+"\' table is created");
       	}
+      	else      	{
+      	  deletePair(currentTableName);      	}
       	break;
     }
   }
 
-  static public boolean putKeyValue(String keyString, String valueString)
+  static public boolean findKeyValue(String keyString)
   {
     Cursor cursor = null;
     cursor = myDatabase.openCursor(null, null);
 		
 	DatabaseEntry foundKey;
 	DatabaseEntry foundValue;
-	DatabaseEntry key;
-	DatabaseEntry value;
 		
 	boolean result = false;
 			
@@ -98,15 +98,10 @@ public class SimpleDBMSParser
 		foundValue = new DatabaseEntry();
 		
 		if(cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT)==OperationStatus.SUCCESS){
-			result = false;
+			result = true;
 		}
 		else{
-			result = true;
-				
-			cursor = myDatabase.openCursor(null, null);
-		    key = new DatabaseEntry(keyString.getBytes("UTF-8"));
-		    value = new DatabaseEntry(valueString.getBytes("UTF-8"));
-		    cursor.put(key, value);
+			result = false;
 		}
 		
 	} catch(DatabaseException de){
@@ -116,8 +111,69 @@ public class SimpleDBMSParser
 	}
 
 	cursor.close();
-	return result;
+	return result;  }
+  
+  static public void putKeyValue(String keyString, String valueString)
+  {
+    Cursor cursor = null;
+    cursor = myDatabase.openCursor(null, null);
+		
+	DatabaseEntry key;
+	DatabaseEntry value;
+		
+	boolean result = false;
+			
+	try{
+	  key = new DatabaseEntry(keyString.getBytes("UTF-8"));
+	  value = new DatabaseEntry(valueString.getBytes("UTF-8"));
+	  cursor.put(key, value);
+		
+	} catch(DatabaseException de){
+	  de.printStackTrace();
+	} catch(UnsupportedEncodingException e){
+	  e.printStackTrace();
+	}
+
+	cursor.close();
   }
+
+  static public boolean pkColumnValidation(String tableName, String columnNameList)
+  {
+    String columnName;
+    String[] columnNameListArray = columnNameList.split(" ");
+    int columnNameListLength = columnNameListArray.length;
+    boolean result = true;
+
+    for(int i=0;i<columnNameListLength;i++)    {
+      columnName = columnNameListArray[i];
+      if(!findKeyValue(tableName+" "+columnName))
+      {
+        result = false;
+        errorMsg += ("\n\tCreate table has failed: \'"+columnName+"\' does not exists in column definition");      }    }
+
+    return result;  }
+
+  static public void deletePair(String tableName)
+  {
+    Cursor cursor = null;
+    cursor = myDatabase.openCursor(null, null);
+
+    DatabaseEntry foundKey = new DatabaseEntry();
+    DatabaseEntry foundValue = new DatabaseEntry();
+
+    cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
+
+    do    {
+      try {
+        String keyString = new String(foundKey.getData(), "UTF-8");
+      	String valueString = new String(foundValue.getData(), "UTF-8");
+
+      	if (keyString.split(" ")[0].equals(tableName))
+      	{
+      	  cursor.delete();
+      	}      } catch(UnsupportedEncodingException e){
+        e.printStackTrace();      }
+    } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);  }
 }
 
 PARSER_END(SimpleDBMSParser)
@@ -209,11 +265,12 @@ void createTableQuery() :
   < CREATE_TABLE >
   tableName = tableName()
   {
-    result = putKeyValue(tableName, tableName);
-    if(result)    {
-      ;    }
-    else    {
-      errorMsg += "\n\tCreate table has failed: table with the same name already exists";    }  }
+    if(findKeyValue(tableName))
+    {
+      errorMsg += "\n\tCreate table has failed: table with the same name already exists";    }
+    else
+    {
+      putKeyValue(tableName, tableName);    }  }
   tableElementList(tableName)
   {
     System.out.println(errorMsg);
@@ -236,7 +293,7 @@ void tableElement(String tableName) :
 {}
 {
   columnDefinition(tableName)
-| tableConstraintDefinition()
+| tableConstraintDefinition(tableName)
 }
 
 void columnDefinition(String tableName) :
@@ -260,24 +317,34 @@ void columnDefinition(String tableName) :
     attributeKey = tableName+" "+columnName;
     attributeValue = dataType;
 
-    result = putKeyValue(attributeKey, attributeValue);
-
-    if(result)    {//      System.out.println("Attribute has been saved");    }    else    {//      System.out.println("Attribute already exists");
-		errorMsg += "\n\tCreate table has failed: column definition is duplicated";    }  }
+    if(findKeyValue(attributeKey))    {
+      errorMsg += "\n\tCreate table has failed: column definition is duplicated";    }    else    {
+      putKeyValue(attributeKey, attributeValue);    }  }
 }
 
-void tableConstraintDefinition() :
+void tableConstraintDefinition(String tableName) :
 {}
 {
-  primaryKeyConstraint()
+  primaryKeyConstraint(tableName)
 | referentialConstraint()
 }
 
-void primaryKeyConstraint() :
-{}
+void primaryKeyConstraint(String tableName) :
+{
+  String columnNameList;
+}
 {
   < PRIMARY_KEY >
-  columnNameList()
+  columnNameList = columnNameList()
+  {
+    if(findKeyValue(tableName+" PK"))
+    {
+      errorMsg += "\n\tCreate table has failed: column definition is duplicated";    }
+    else
+    {
+      if(pkColumnValidation(tableName, columnNameList))
+      {
+        putKeyValue(tableName+" PK", columnNameList);      }    }  }
 }
 
 void referentialConstraint() :
@@ -290,16 +357,25 @@ void referentialConstraint() :
   columnNameList()
 }
 
-void columnNameList() :
-{}
+String columnNameList() :
+{
+  String columnNameList = "";
+  String columnName;
+}
 {
   < LEFT_PAREN >
-  columnName()
+  columnName = columnName()
+  {
+    columnNameList += (columnName+" ");  }
   (
     < COMMA >
-    columnName()
+    columnName = columnName()
+    {
+      columnNameList += (columnName+" ");    }
   )*
   < RIGHT_PAREN >
+  {
+    return columnNameList;  }
 }
 
 String dataType() :

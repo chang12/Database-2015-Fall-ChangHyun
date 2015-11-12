@@ -40,7 +40,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         dbConfig = new DatabaseConfig();
     dbConfig.setAllowCreate(true);
     dbConfig.setSortedDuplicates(true);
-    myDatabase = myDbEnvironment.openDatabase(null, "sampleDatabase", dbConfig);
+//    myDatabase = myDbEnvironment.openDatabase(null, "sampleDatabase", dbConfig);
 
     SimpleDBMSParser parser = new SimpleDBMSParser(System.in);
 
@@ -71,19 +71,21 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         {
           System.out.println("\u005c'"+currentTableName+"\u005c' table is created");
         }
+        else
+        {
+          deletePair(currentTableName);
+        }
         break;
     }
   }
 
-  static public boolean putKeyValue(String keyString, String valueString)
+  static public boolean findKeyValue(String keyString)
   {
     Cursor cursor = null;
     cursor = myDatabase.openCursor(null, null);
 
         DatabaseEntry foundKey;
         DatabaseEntry foundValue;
-        DatabaseEntry key;
-        DatabaseEntry value;
 
         boolean result = false;
 
@@ -92,15 +94,10 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
                 foundValue = new DatabaseEntry();
 
                 if(cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT)==OperationStatus.SUCCESS){
-                        result = false;
+                        result = true;
                 }
                 else{
-                        result = true;
-
-                        cursor = myDatabase.openCursor(null, null);
-                    key = new DatabaseEntry(keyString.getBytes("UTF-8"));
-                    value = new DatabaseEntry(valueString.getBytes("UTF-8"));
-                    cursor.put(key, value);
+                        result = false;
                 }
 
         } catch(DatabaseException de){
@@ -111,6 +108,77 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
         cursor.close();
         return result;
+  }
+
+  static public void putKeyValue(String keyString, String valueString)
+  {
+    Cursor cursor = null;
+    cursor = myDatabase.openCursor(null, null);
+
+        DatabaseEntry key;
+        DatabaseEntry value;
+
+        boolean result = false;
+
+        try{
+          key = new DatabaseEntry(keyString.getBytes("UTF-8"));
+          value = new DatabaseEntry(valueString.getBytes("UTF-8"));
+          cursor.put(key, value);
+
+        } catch(DatabaseException de){
+          de.printStackTrace();
+        } catch(UnsupportedEncodingException e){
+          e.printStackTrace();
+        }
+
+        cursor.close();
+  }
+
+  static public boolean pkColumnValidation(String tableName, String columnNameList)
+  {
+    String columnName;
+    String[] columnNameListArray = columnNameList.split(" ");
+    int columnNameListLength = columnNameListArray.length;
+    boolean result = true;
+
+    for(int i=0;i<columnNameListLength;i++)
+    {
+      columnName = columnNameListArray[i];
+      if(!findKeyValue(tableName+" "+columnName))
+      {
+        result = false;
+        errorMsg += ("\u005cn\u005ctCreate table has failed: \u005c'"+columnName+"\u005c' does not exists in column definition");
+      }
+    }
+
+    return result;
+  }
+
+  static public void deletePair(String tableName)
+  {
+    Cursor cursor = null;
+    cursor = myDatabase.openCursor(null, null);
+
+    DatabaseEntry foundKey = new DatabaseEntry();
+    DatabaseEntry foundValue = new DatabaseEntry();
+
+    cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
+
+    do
+    {
+      try {
+        String keyString = new String(foundKey.getData(), "UTF-8");
+        String valueString = new String(foundValue.getData(), "UTF-8");
+
+        if (keyString.split(" ")[0].equals(tableName))
+        {
+          cursor.delete();
+        }
+      } catch(UnsupportedEncodingException e){
+        e.printStackTrace();
+      }
+
+    } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
   }
 
   static final public void command() throws ParseException {
@@ -167,14 +235,13 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   boolean result;
     jj_consume_token(CREATE_TABLE);
     tableName = tableName();
-    result = putKeyValue(tableName, tableName);
-    if(result)
+    if(findKeyValue(tableName))
     {
-      ;
+      errorMsg += "\u005cn\u005ctCreate table has failed: table with the same name already exists";
     }
     else
     {
-      errorMsg += "\u005cn\u005ctCreate table has failed: table with the same name already exists";
+      putKeyValue(tableName, tableName);
     }
     tableElementList(tableName);
     System.out.println(errorMsg);
@@ -207,7 +274,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       break;
     case PRIMARY_KEY:
     case FOREIGN_KEY:
-      tableConstraintDefinition();
+      tableConstraintDefinition(tableName);
       break;
     default:
       jj_la1[3] = jj_gen;
@@ -237,23 +304,20 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     attributeKey = tableName+" "+columnName;
     attributeValue = dataType;
 
-    result = putKeyValue(attributeKey, attributeValue);
-
-    if(result)
+    if(findKeyValue(attributeKey))
     {
-//      System.out.println("Attribute has been saved");
+      errorMsg += "\u005cn\u005ctCreate table has failed: column definition is duplicated";
     }
     else
     {
-//      System.out.println("Attribute already exists");
-                errorMsg += "\u005cn\u005ctCreate table has failed: column definition is duplicated";
+      putKeyValue(attributeKey, attributeValue);
     }
   }
 
-  static final public void tableConstraintDefinition() throws ParseException {
+  static final public void tableConstraintDefinition(String tableName) throws ParseException {
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case PRIMARY_KEY:
-      primaryKeyConstraint();
+      primaryKeyConstraint(tableName);
       break;
     case FOREIGN_KEY:
       referentialConstraint();
@@ -265,9 +329,21 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
   }
 
-  static final public void primaryKeyConstraint() throws ParseException {
+  static final public void primaryKeyConstraint(String tableName) throws ParseException {
+  String columnNameList;
     jj_consume_token(PRIMARY_KEY);
-    columnNameList();
+    columnNameList = columnNameList();
+    if(findKeyValue(tableName+" PK"))
+    {
+      errorMsg += "\u005cn\u005ctCreate table has failed: column definition is duplicated";
+    }
+    else
+    {
+      if(pkColumnValidation(tableName, columnNameList))
+      {
+        putKeyValue(tableName+" PK", columnNameList);
+      }
+    }
   }
 
   static final public void referentialConstraint() throws ParseException {
@@ -278,9 +354,12 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     columnNameList();
   }
 
-  static final public void columnNameList() throws ParseException {
+  static final public String columnNameList() throws ParseException {
+  String columnNameList = "";
+  String columnName;
     jj_consume_token(LEFT_PAREN);
-    columnName();
+    columnName = columnName();
+    columnNameList += (columnName+" ");
     label_3:
     while (true) {
       switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
@@ -292,9 +371,12 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         break label_3;
       }
       jj_consume_token(COMMA);
-      columnName();
+      columnName = columnName();
+      columnNameList += (columnName+" ");
     }
     jj_consume_token(RIGHT_PAREN);
+    {if (true) return columnNameList;}
+    throw new Error("Missing return statement in function");
   }
 
   static final public String dataType() throws ParseException {
