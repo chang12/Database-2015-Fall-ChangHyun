@@ -47,7 +47,7 @@ public class SimpleDBMSParser
     // Open Database or if not, create one.
 	dbConfig = new DatabaseConfig();
     dbConfig.setAllowCreate(true);
-    dbConfig.setSortedDuplicates(true);
+    dbConfig.setSortedDuplicates(false);
 //    myDatabase = myDbEnvironment.openDatabase(null, "sampleDatabase", dbConfig);
     
     SimpleDBMSParser parser = new SimpleDBMSParser(System.in);
@@ -72,13 +72,25 @@ public class SimpleDBMSParser
     switch(q)
     {
       case PRINT_SYNTAX_ERROR:
+      	if(myDatabase != null)
+      	{
+      	  String databaseName = myDatabase.getDatabaseName();
+      	  System.out.println("db: "+myDatabase);
+      	  System.out.println("name: "+databaseName);
+      	  myDatabase.close();
+      	  myDbEnvironment.removeDatabase(null, databaseName);
+      	}
       	System.out.println("Syntax error");
       	break;
       case PRINT_CREATE_TABLE:
-      	if(errorMsg=="")      	{      	  System.out.println("\'"+currentTableName+"\' table is created");
+      	if(errorMsg=="")      	{
+      	  myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
+      	  putKeyValue(currentTableName, currentTableName);
+      	  myDatabase.close();      	  System.out.println("\'"+currentTableName+"\' table is created");
       	}
       	else      	{
-      	  deletePair(currentTableName);      	}
+      	  System.out.println(errorMsg);
+      	  myDbEnvironment.removeDatabase(null, "@TEMP");      	}
       	break;
     }
   }
@@ -149,7 +161,7 @@ public class SimpleDBMSParser
       if(!findKeyValue(tableName+" "+columnName))
       {
         result = false;
-        errorMsg += ("\n\tCreate table has failed: \'"+columnName+"\' does not exists in column definition");      }    }
+        addErrorMsg("Create table has failed: \'"+columnName+"\' does not exists in column definition");      }    }
 
     return result;  }
 
@@ -174,6 +186,12 @@ public class SimpleDBMSParser
       	}      } catch(UnsupportedEncodingException e){
         e.printStackTrace();      }
     } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);  }
+
+  static public void addErrorMsg(String msg)
+  {
+    if(errorMsg=="")
+    {
+      errorMsg = msg;    }  }
 }
 
 PARSER_END(SimpleDBMSParser)
@@ -255,26 +273,32 @@ int query() :
 
 void createTableQuery() :
 {
-  errorMsg = "";
-  currentTableName = "";
   String tableName;
-
   boolean result;
 }
 {
   < CREATE_TABLE >
   tableName = tableName()
   {
+    errorMsg = "";
+  	currentTableName = "";
+  	myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
+
     if(findKeyValue(tableName))
     {
-      errorMsg += "\n\tCreate table has failed: table with the same name already exists";    }
+      addErrorMsg("Create table has failed: table with the same name already exists");
+      myDatabase.close();
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }
     else
     {
-      putKeyValue(tableName, tableName);    }  }
+//      putKeyValue(tableName, tableName);
+      myDatabase.close();
+      myDatabase = myDbEnvironment.openDatabase(null, tableName, dbConfig);    }
+      }
   tableElementList(tableName)
   {
-    System.out.println(errorMsg);
-    currentTableName = tableName;  }
+    currentTableName = tableName;
+    myDatabase.close();  }
 }
 
 void tableElementList(String tableName) :
@@ -302,6 +326,7 @@ void columnDefinition(String tableName) :
   String attributeValue;
   String columnName;
   String dataType;
+  String databaseName;
 
   boolean result;
 }
@@ -318,7 +343,11 @@ void columnDefinition(String tableName) :
     attributeValue = dataType;
 
     if(findKeyValue(attributeKey))    {
-      errorMsg += "\n\tCreate table has failed: column definition is duplicated";    }    else    {
+      addErrorMsg("Create table has failed: column definition is duplicated");
+      databaseName = myDatabase.getDatabaseName();
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }    else    {
       putKeyValue(attributeKey, attributeValue);    }  }
 }
 
@@ -332,6 +361,7 @@ void tableConstraintDefinition(String tableName) :
 void primaryKeyConstraint(String tableName) :
 {
   String columnNameList;
+  String databaseName;
 }
 {
   < PRIMARY_KEY >
@@ -339,12 +369,22 @@ void primaryKeyConstraint(String tableName) :
   {
     if(findKeyValue(tableName+" PK"))
     {
-      errorMsg += "\n\tCreate table has failed: column definition is duplicated";    }
+      addErrorMsg("Create table has failed: primary key definition is duplicated");
+      databaseName = myDatabase.getDatabaseName();
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }
     else
     {
       if(pkColumnValidation(tableName, columnNameList))
       {
-        putKeyValue(tableName+" PK", columnNameList);      }    }  }
+        putKeyValue(tableName+" PK", columnNameList);      }
+      else
+      {
+        databaseName = myDatabase.getDatabaseName();
+      	myDatabase.close();
+      	myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      	myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);      }    }  }
 }
 
 void referentialConstraint() :
@@ -382,6 +422,7 @@ String dataType() :
 {
   Token intValueToken;
   int intValue;
+  String databaseName;
 }
 {
   < INT >
@@ -395,7 +436,11 @@ String dataType() :
     {
       intValue = Integer.parseInt(intValueToken.image);
       if(intValue<1)      {
-        errorMsg += "\n\tChar length should be > 0";      }
+        addErrorMsg("Char length should be > 0");
+        databaseName = myDatabase.getDatabaseName();
+      	myDatabase.close();
+      	myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      	myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);      }
       return ("char "+intValue);    }
   )
 | < DATE >

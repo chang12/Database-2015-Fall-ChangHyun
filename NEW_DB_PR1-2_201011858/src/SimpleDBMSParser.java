@@ -39,7 +39,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     // Open Database or if not, create one.
         dbConfig = new DatabaseConfig();
     dbConfig.setAllowCreate(true);
-    dbConfig.setSortedDuplicates(true);
+    dbConfig.setSortedDuplicates(false);
 //    myDatabase = myDbEnvironment.openDatabase(null, "sampleDatabase", dbConfig);
 
     SimpleDBMSParser parser = new SimpleDBMSParser(System.in);
@@ -64,16 +64,28 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     switch(q)
     {
       case PRINT_SYNTAX_ERROR:
+        if(myDatabase != null)
+        {
+          String databaseName = myDatabase.getDatabaseName();
+          System.out.println("db: "+myDatabase);
+          System.out.println("name: "+databaseName);
+          myDatabase.close();
+          myDbEnvironment.removeDatabase(null, databaseName);
+        }
         System.out.println("Syntax error");
         break;
       case PRINT_CREATE_TABLE:
         if(errorMsg=="")
         {
+          myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
+          putKeyValue(currentTableName, currentTableName);
+          myDatabase.close();
           System.out.println("\u005c'"+currentTableName+"\u005c' table is created");
         }
         else
         {
-          deletePair(currentTableName);
+          System.out.println(errorMsg);
+          myDbEnvironment.removeDatabase(null, "@TEMP");
         }
         break;
     }
@@ -147,7 +159,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       if(!findKeyValue(tableName+" "+columnName))
       {
         result = false;
-        errorMsg += ("\u005cn\u005ctCreate table has failed: \u005c'"+columnName+"\u005c' does not exists in column definition");
+        addErrorMsg("Create table has failed: \u005c'"+columnName+"\u005c' does not exists in column definition");
       }
     }
 
@@ -179,6 +191,14 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       }
 
     } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
+  }
+
+  static public void addErrorMsg(String msg)
+  {
+    if(errorMsg=="")
+    {
+      errorMsg = msg;
+    }
   }
 
   static final public void command() throws ParseException {
@@ -228,24 +248,29 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   }
 
   static final public void createTableQuery() throws ParseException {
-  errorMsg = "";
-  currentTableName = "";
   String tableName;
-
   boolean result;
     jj_consume_token(CREATE_TABLE);
     tableName = tableName();
+    errorMsg = "";
+        currentTableName = "";
+        myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
+
     if(findKeyValue(tableName))
     {
-      errorMsg += "\u005cn\u005ctCreate table has failed: table with the same name already exists";
+      addErrorMsg("Create table has failed: table with the same name already exists");
+      myDatabase.close();
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);
     }
     else
     {
-      putKeyValue(tableName, tableName);
+//      putKeyValue(tableName, tableName);
+      myDatabase.close();
+      myDatabase = myDbEnvironment.openDatabase(null, tableName, dbConfig);
     }
     tableElementList(tableName);
-    System.out.println(errorMsg);
     currentTableName = tableName;
+    myDatabase.close();
   }
 
   static final public void tableElementList(String tableName) throws ParseException {
@@ -288,6 +313,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   String attributeValue;
   String columnName;
   String dataType;
+  String databaseName;
 
   boolean result;
     columnName = columnName();
@@ -306,7 +332,11 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
     if(findKeyValue(attributeKey))
     {
-      errorMsg += "\u005cn\u005ctCreate table has failed: column definition is duplicated";
+      addErrorMsg("Create table has failed: column definition is duplicated");
+      databaseName = myDatabase.getDatabaseName();
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);
     }
     else
     {
@@ -331,17 +361,29 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   static final public void primaryKeyConstraint(String tableName) throws ParseException {
   String columnNameList;
+  String databaseName;
     jj_consume_token(PRIMARY_KEY);
     columnNameList = columnNameList();
     if(findKeyValue(tableName+" PK"))
     {
-      errorMsg += "\u005cn\u005ctCreate table has failed: column definition is duplicated";
+      addErrorMsg("Create table has failed: primary key definition is duplicated");
+      databaseName = myDatabase.getDatabaseName();
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);
     }
     else
     {
       if(pkColumnValidation(tableName, columnNameList))
       {
         putKeyValue(tableName+" PK", columnNameList);
+      }
+      else
+      {
+        databaseName = myDatabase.getDatabaseName();
+        myDatabase.close();
+        myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+        myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);
       }
     }
   }
@@ -382,6 +424,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   static final public String dataType() throws ParseException {
   Token intValueToken;
   int intValue;
+  String databaseName;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case INT:
       jj_consume_token(INT);
@@ -395,7 +438,11 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       intValue = Integer.parseInt(intValueToken.image);
       if(intValue<1)
       {
-        errorMsg += "\u005cn\u005ctChar length should be > 0";
+        addErrorMsg("Char length should be > 0");
+        databaseName = myDatabase.getDatabaseName();
+        myDatabase.close();
+        myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+        myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);
       }
       {if (true) return ("char "+intValue);}
       break;
