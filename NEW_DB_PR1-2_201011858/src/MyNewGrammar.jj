@@ -26,6 +26,7 @@ public class SimpleDBMSParser
 {
   public static final int PRINT_SYNTAX_ERROR = 0;
   public static final int PRINT_CREATE_TABLE = 1;
+  public static final int DUPLICATE_COLUMN_DEF_ERROR = 2;
 
   public static Environment myDbEnvironment = null;
   public static EnvironmentConfig envConfig;
@@ -74,7 +75,48 @@ public class SimpleDBMSParser
       case PRINT_CREATE_TABLE:
       	System.out.println("\'CREATE TABLE\' requested");
       	break;
+      case DUPLICATE_COLUMN_DEF_ERROR:
+      	System.out.println("Create table has failed: column definition is duplicated");
+      	break;
     }
+  }
+
+  static public boolean putAttrInfo(String keyString, String valueString)
+  {
+    Cursor cursor = null;
+    cursor = myDatabase.openCursor(null, null);
+		
+	DatabaseEntry foundKey;
+	DatabaseEntry foundValue;
+	DatabaseEntry key;
+	DatabaseEntry value;
+		
+	boolean result = false;
+			
+	try{
+		foundKey = new DatabaseEntry(keyString.getBytes("UTF-8"));
+		foundValue = new DatabaseEntry();
+		
+		if(cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT)==OperationStatus.SUCCESS){
+			result = false;
+		}
+		else{
+			result = true;
+				
+			cursor = myDatabase.openCursor(null, null);
+		    key = new DatabaseEntry(keyString.getBytes("UTF-8"));
+		    value = new DatabaseEntry(valueString.getBytes("UTF-8"));
+		    cursor.put(key, value);
+		}
+		
+	} catch(DatabaseException de){
+		de.printStackTrace();
+	} catch(UnsupportedEncodingException e){
+		e.printStackTrace();
+	}
+
+	cursor.close();
+	return result;
   }
 }
 
@@ -117,6 +159,8 @@ void command() :
     < EXIT >
     < SEMICOLON >
     {
+      if (myDatabase != null) myDatabase.close();
+      if (myDbEnvironment != null) myDbEnvironment.close();
       System.exit(0);
     }
   ) 
@@ -143,10 +187,7 @@ int query() :
 }
 {
   (
-    createTableQuery()
-    {
-      q = PRINT_CREATE_TABLE;
-    }
+    q = createTableQuery()
   )
   (
     {
@@ -155,55 +196,56 @@ int query() :
   )
 }
 
-void createTableQuery() :
+int createTableQuery() :
 {
   String tableName;
+  int q;
 }
 {
   < CREATE_TABLE >
   tableName = tableName()
-  tableElementList(tableName)
   {
-    DatabaseEntry foundKey = new DatabaseEntry();
-    DatabaseEntry foundData = new DatabaseEntry();
-
-    Cursor cursor = myDatabase.openCursor(null, null);
-
-    cursor.getFirst(foundKey, foundData, LockMode.DEFAULT);
-
-    do    {
-      try {        String keyString = new String(foundKey.getData(), "UTF-8");
-        String dataString = new String(foundData.getData(), "UTF-8");
-        System.out.println(keyString);
-        System.out.println(dataString);      } catch(UnsupportedEncodingException e) {
-      }                  } while (cursor.getNext(foundKey, foundData, LockMode.DEFAULT) == OperationStatus.SUCCESS);  }
+    // table name 기존에 존재하는지 체크하는 함수 들어감  }
+  q = tableElementList(tableName)
+  {
+    return q;  }
 }
 
-void tableElementList(String tableName) :
-{}
+int tableElementList(String tableName) :
+{
+  int q;
+}
 {
   < LEFT_PAREN >
-  tableElement(tableName)
+  q = tableElement(tableName)
   (
     < COMMA >
-    tableElement(tableName)
+    q = tableElement(tableName)
   )*
   < RIGHT_PAREN >
+  {
+    return q;  }
 }
 
-void tableElement(String tableName) :
-{}
+int tableElement(String tableName) :
 {
-  columnDefinition(tableName)
-| tableConstraintDefinition()
+  int q;
+}
+{
+  q = columnDefinition(tableName)
+//| tableConstraintDefinition()
+  {
+    return q;  }
 }
 
-void columnDefinition(String tableName) :
+int columnDefinition(String tableName) :
 {
   String attributeKey;
   String attributeValue;
   String columnName;
   String dataType;
+
+  boolean result;
 }
 {
   columnName = columnName()
@@ -216,20 +258,12 @@ void columnDefinition(String tableName) :
   {
     attributeKey = tableName+" "+columnName;
     attributeValue = dataType;
-//    System.out.println(attributeKey);
-//    System.out.println(attributeValue);
 
-    Cursor cursor = null;
-    DatabaseEntry key;
-    DatabaseEntry value;
+    result = putAttrInfo(attributeKey, attributeValue);
 
-    try    {
-      cursor = myDatabase.openCursor(null, null);
-      key = new DatabaseEntry(attributeKey.getBytes("UTF-8"));
-      value = new DatabaseEntry(attributeValue.getBytes("UTF-8"));
-      cursor.put(key, value);    } catch(DatabaseException de)    {
-      de.printStackTrace();    } catch(UnsupportedEncodingException e)    {
-      e.printStackTrace();    }  }
+    if(result)    {//      System.out.println("Attribute has been saved");
+		return PRINT_CREATE_TABLE;    }    else    {//      System.out.println("Attribute already exists");
+		return DUPLICATE_COLUMN_DEF_ERROR;    }  }
 }
 
 void tableConstraintDefinition() :
