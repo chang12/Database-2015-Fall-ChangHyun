@@ -18,7 +18,9 @@ import com.sleepycat.je.OperationStatus;
 public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   public static final int PRINT_SYNTAX_ERROR = 0;
   public static final int PRINT_CREATE_TABLE = 1;
-  public static final int DUPLICATE_COLUMN_DEF_ERROR = 2;
+
+  public static String errorMsg;
+  public static String currentTableName;
 
   public static Environment myDbEnvironment = null;
   public static EnvironmentConfig envConfig;
@@ -46,7 +48,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     {
       try
       {
-        System.out.print("DB_2015-12345> ");
+        System.out.print("DB_2010-11858> ");
         parser.command();
       }
       catch (Exception e)
@@ -65,15 +67,15 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         System.out.println("Syntax error");
         break;
       case PRINT_CREATE_TABLE:
-        System.out.println("\u005c'CREATE TABLE\u005c' requested");
-        break;
-      case DUPLICATE_COLUMN_DEF_ERROR:
-        System.out.println("Create table has failed: column definition is duplicated");
+        if(errorMsg=="")
+        {
+          System.out.println("\u005c'"+currentTableName+"\u005c' table is created");
+        }
         break;
     }
   }
 
-  static public boolean putAttrInfo(String keyString, String valueString)
+  static public boolean putKeyValue(String keyString, String valueString)
   {
     Cursor cursor = null;
     cursor = myDatabase.openCursor(null, null);
@@ -136,7 +138,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     while (true) {
       q = query();
       jj_consume_token(SEMICOLON);
-      System.out.print("DB_2015-12345> ");
+      System.out.print("DB_2010-11858> ");
       printMessage(q);
       switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
       case CREATE_TABLE:
@@ -151,26 +153,37 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   static final public int query() throws ParseException {
   int q;
-    q = createTableQuery();
+    createTableQuery();
+      q = PRINT_CREATE_TABLE;
       {if (true) return q;}
     throw new Error("Missing return statement in function");
   }
 
-  static final public int createTableQuery() throws ParseException {
+  static final public void createTableQuery() throws ParseException {
+  errorMsg = "";
+  currentTableName = "";
   String tableName;
-  int q;
+
+  boolean result;
     jj_consume_token(CREATE_TABLE);
     tableName = tableName();
-
-    q = tableElementList(tableName);
-    {if (true) return q;}
-    throw new Error("Missing return statement in function");
+    result = putKeyValue(tableName, tableName);
+    if(result)
+    {
+      ;
+    }
+    else
+    {
+      errorMsg += "\u005cn\u005ctCreate table has failed: table with the same name already exists";
+    }
+    tableElementList(tableName);
+    System.out.println(errorMsg);
+    currentTableName = tableName;
   }
 
-  static final public int tableElementList(String tableName) throws ParseException {
-  int q;
+  static final public void tableElementList(String tableName) throws ParseException {
     jj_consume_token(LEFT_PAREN);
-    q = tableElement(tableName);
+    tableElement(tableName);
     label_2:
     while (true) {
       switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
@@ -182,21 +195,28 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         break label_2;
       }
       jj_consume_token(COMMA);
-      q = tableElement(tableName);
+      tableElement(tableName);
     }
     jj_consume_token(RIGHT_PAREN);
-    {if (true) return q;}
-    throw new Error("Missing return statement in function");
   }
 
-  static final public int tableElement(String tableName) throws ParseException {
-  int q;
-    q = columnDefinition(tableName);
-    {if (true) return q;}
-    throw new Error("Missing return statement in function");
+  static final public void tableElement(String tableName) throws ParseException {
+    switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
+    case LEGAL_IDENTIFIER:
+      columnDefinition(tableName);
+      break;
+    case PRIMARY_KEY:
+    case FOREIGN_KEY:
+      tableConstraintDefinition();
+      break;
+    default:
+      jj_la1[3] = jj_gen;
+      jj_consume_token(-1);
+      throw new ParseException();
+    }
   }
 
-  static final public int columnDefinition(String tableName) throws ParseException {
+  static final public void columnDefinition(String tableName) throws ParseException {
   String attributeKey;
   String attributeValue;
   String columnName;
@@ -211,25 +231,23 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       dataType+=" notnull";
       break;
     default:
-      jj_la1[3] = jj_gen;
+      jj_la1[4] = jj_gen;
       ;
     }
     attributeKey = tableName+" "+columnName;
     attributeValue = dataType;
 
-    result = putAttrInfo(attributeKey, attributeValue);
+    result = putKeyValue(attributeKey, attributeValue);
 
     if(result)
     {
 //      System.out.println("Attribute has been saved");
-                {if (true) return PRINT_CREATE_TABLE;}
     }
     else
     {
 //      System.out.println("Attribute already exists");
-                {if (true) return DUPLICATE_COLUMN_DEF_ERROR;}
+                errorMsg += "\u005cn\u005ctCreate table has failed: column definition is duplicated";
     }
-    throw new Error("Missing return statement in function");
   }
 
   static final public void tableConstraintDefinition() throws ParseException {
@@ -241,7 +259,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       referentialConstraint();
       break;
     default:
-      jj_la1[4] = jj_gen;
+      jj_la1[5] = jj_gen;
       jj_consume_token(-1);
       throw new ParseException();
     }
@@ -270,7 +288,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         ;
         break;
       default:
-        jj_la1[5] = jj_gen;
+        jj_la1[6] = jj_gen;
         break label_3;
       }
       jj_consume_token(COMMA);
@@ -281,6 +299,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   static final public String dataType() throws ParseException {
   Token intValueToken;
+  int intValue;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case INT:
       jj_consume_token(INT);
@@ -291,14 +310,19 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       jj_consume_token(LEFT_PAREN);
       intValueToken = jj_consume_token(INT_VALUE);
       jj_consume_token(RIGHT_PAREN);
-      {if (true) return ("char "+Integer.parseInt(intValueToken.image));}
+      intValue = Integer.parseInt(intValueToken.image);
+      if(intValue<1)
+      {
+        errorMsg += "\u005cn\u005ctChar length should be > 0";
+      }
+      {if (true) return ("char "+intValue);}
       break;
     case DATE:
       jj_consume_token(DATE);
     {if (true) return "date 0";}
       break;
     default:
-      jj_la1[6] = jj_gen;
+      jj_la1[7] = jj_gen;
       jj_consume_token(-1);
       throw new ParseException();
     }
@@ -329,13 +353,13 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   static public Token jj_nt;
   static private int jj_ntk;
   static private int jj_gen;
-  static final private int[] jj_la1 = new int[7];
+  static final private int[] jj_la1 = new int[8];
   static private int[] jj_la1_0;
   static {
       jj_la1_init_0();
    }
    private static void jj_la1_init_0() {
-      jj_la1_0 = new int[] {0x220,0x200,0x20000,0x400,0x1800,0x20000,0x1c0,};
+      jj_la1_0 = new int[] {0x220,0x200,0x20000,0x201800,0x400,0x1800,0x20000,0x1c0,};
    }
 
   /** Constructor with InputStream. */
@@ -356,7 +380,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 7; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 8; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -370,7 +394,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 7; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 8; i++) jj_la1[i] = -1;
   }
 
   /** Constructor. */
@@ -387,7 +411,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 7; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 8; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -397,7 +421,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 7; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 8; i++) jj_la1[i] = -1;
   }
 
   /** Constructor with generated Token Manager. */
@@ -413,7 +437,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 7; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 8; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -422,7 +446,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 7; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 8; i++) jj_la1[i] = -1;
   }
 
   static private Token jj_consume_token(int kind) throws ParseException {
@@ -473,12 +497,12 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   /** Generate ParseException. */
   static public ParseException generateParseException() {
     jj_expentries.clear();
-    boolean[] la1tokens = new boolean[24];
+    boolean[] la1tokens = new boolean[23];
     if (jj_kind >= 0) {
       la1tokens[jj_kind] = true;
       jj_kind = -1;
     }
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 8; i++) {
       if (jj_la1[i] == jj_gen) {
         for (int j = 0; j < 32; j++) {
           if ((jj_la1_0[i] & (1<<j)) != 0) {
@@ -487,7 +511,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         }
       }
     }
-    for (int i = 0; i < 24; i++) {
+    for (int i = 0; i < 23; i++) {
       if (la1tokens[i]) {
         jj_expentry = new int[1];
         jj_expentry[0] = i;

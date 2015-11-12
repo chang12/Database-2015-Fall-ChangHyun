@@ -26,7 +26,9 @@ public class SimpleDBMSParser
 {
   public static final int PRINT_SYNTAX_ERROR = 0;
   public static final int PRINT_CREATE_TABLE = 1;
-  public static final int DUPLICATE_COLUMN_DEF_ERROR = 2;
+
+  public static String errorMsg;
+  public static String currentTableName;
 
   public static Environment myDbEnvironment = null;
   public static EnvironmentConfig envConfig;
@@ -54,7 +56,7 @@ public class SimpleDBMSParser
     {
       try
       {
-        System.out.print("DB_2015-12345> ");
+        System.out.print("DB_2010-11858> ");
         parser.command();
       }
       catch (Exception e)
@@ -73,15 +75,13 @@ public class SimpleDBMSParser
       	System.out.println("Syntax error");
       	break;
       case PRINT_CREATE_TABLE:
-      	System.out.println("\'CREATE TABLE\' requested");
-      	break;
-      case DUPLICATE_COLUMN_DEF_ERROR:
-      	System.out.println("Create table has failed: column definition is duplicated");
+      	if(errorMsg=="")      	{      	  System.out.println("\'"+currentTableName+"\' table is created");
+      	}
       	break;
     }
   }
 
-  static public boolean putAttrInfo(String keyString, String valueString)
+  static public boolean putKeyValue(String keyString, String valueString)
   {
     Cursor cursor = null;
     cursor = myDatabase.openCursor(null, null);
@@ -145,10 +145,9 @@ TOKEN :
 | < COMMA : "," >
 | < UNDERSCORE : "_" >
 | < SIGN : "+" | "-" >
-| < DIGIT : [ "0"-"9" ] >
+| < INT_VALUE : (< SIGN >)? (["0"-"9"])+ >
 | < LEGAL_IDENTIFIER : < ALPHABET > (< ALPHABET > | < UNDERSCORE >)* >
 | < ALPHABET : [ "A"-"Z", "a"-"z" ] >
-| < INT_VALUE : (< SIGN >)? (< DIGIT >)+ >
 }
 
 void command() :
@@ -175,7 +174,7 @@ void queryList() :
     q = query()
     < SEMICOLON >
     {
-      System.out.print("DB_2015-12345> ");
+      System.out.print("DB_2010-11858> ");
       printMessage(q);
     }
   )+
@@ -187,7 +186,9 @@ int query() :
 }
 {
   (
-    q = createTableQuery()
+    createTableQuery()
+    {
+      q = PRINT_CREATE_TABLE;    }
   )
   (
     {
@@ -196,49 +197,49 @@ int query() :
   )
 }
 
-int createTableQuery() :
+void createTableQuery() :
 {
+  errorMsg = "";
+  currentTableName = "";
   String tableName;
-  int q;
+
+  boolean result;
 }
 {
   < CREATE_TABLE >
   tableName = tableName()
   {
-    // table name 기존에 존재하는지 체크하는 함수 들어감  }
-  q = tableElementList(tableName)
+    result = putKeyValue(tableName, tableName);
+    if(result)    {
+      ;    }
+    else    {
+      errorMsg += "\n\tCreate table has failed: table with the same name already exists";    }  }
+  tableElementList(tableName)
   {
-    return q;  }
+    System.out.println(errorMsg);
+    currentTableName = tableName;  }
 }
 
-int tableElementList(String tableName) :
-{
-  int q;
-}
+void tableElementList(String tableName) :
+{}
 {
   < LEFT_PAREN >
-  q = tableElement(tableName)
+  tableElement(tableName)
   (
     < COMMA >
-    q = tableElement(tableName)
+    tableElement(tableName)
   )*
   < RIGHT_PAREN >
-  {
-    return q;  }
 }
 
-int tableElement(String tableName) :
+void tableElement(String tableName) :
+{}
 {
-  int q;
-}
-{
-  q = columnDefinition(tableName)
-//| tableConstraintDefinition()
-  {
-    return q;  }
+  columnDefinition(tableName)
+| tableConstraintDefinition()
 }
 
-int columnDefinition(String tableName) :
+void columnDefinition(String tableName) :
 {
   String attributeKey;
   String attributeValue;
@@ -259,11 +260,10 @@ int columnDefinition(String tableName) :
     attributeKey = tableName+" "+columnName;
     attributeValue = dataType;
 
-    result = putAttrInfo(attributeKey, attributeValue);
+    result = putKeyValue(attributeKey, attributeValue);
 
-    if(result)    {//      System.out.println("Attribute has been saved");
-		return PRINT_CREATE_TABLE;    }    else    {//      System.out.println("Attribute already exists");
-		return DUPLICATE_COLUMN_DEF_ERROR;    }  }
+    if(result)    {//      System.out.println("Attribute has been saved");    }    else    {//      System.out.println("Attribute already exists");
+		errorMsg += "\n\tCreate table has failed: column definition is duplicated";    }  }
 }
 
 void tableConstraintDefinition() :
@@ -305,6 +305,7 @@ void columnNameList() :
 String dataType() :
 {
   Token intValueToken;
+  int intValue;
 }
 {
   < INT >
@@ -313,10 +314,13 @@ String dataType() :
 | (
     < CHAR >
     < LEFT_PAREN >
-    intValueToken = < INT_VALUE >
+	intValueToken = < INT_VALUE >
     < RIGHT_PAREN >
     {
-      return ("char "+Integer.parseInt(intValueToken.image));    }
+      intValue = Integer.parseInt(intValueToken.image);
+      if(intValue<1)      {
+        errorMsg += "\n\tChar length should be > 0";      }
+      return ("char "+intValue);    }
   )
 | < DATE >
   {
