@@ -146,8 +146,9 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         cursor.close();
   }
 
-  static public boolean pkColumnValidation(String tableName, String columnNameList)
+  static public boolean columnValidation(String tableName, String columnNameList, boolean addMsg)
   {
+
     String columnName;
     String[] columnNameListArray = columnNameList.split(" ");
     int columnNameListLength = columnNameListArray.length;
@@ -159,7 +160,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       if(!findKeyValue(tableName+" "+columnName))
       {
         result = false;
-        addErrorMsg("Create table has failed: \u005c'"+columnName+"\u005c' does not exists in column definition");
+        if(addMsg) addErrorMsg("Create table has failed: \u005c'"+columnName+"\u005c' does not exists in column definition");
       }
     }
 
@@ -264,7 +265,6 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
     else
     {
-//      putKeyValue(tableName, tableName);
       myDatabase.close();
       myDatabase = myDbEnvironment.openDatabase(null, tableName, dbConfig);
     }
@@ -350,7 +350,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       primaryKeyConstraint(tableName);
       break;
     case FOREIGN_KEY:
-      referentialConstraint();
+      referentialConstraint(tableName);
       break;
     default:
       jj_la1[5] = jj_gen;
@@ -374,7 +374,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
     else
     {
-      if(pkColumnValidation(tableName, columnNameList))
+      if(columnValidation(tableName, columnNameList, true))
       {
         putKeyValue(tableName+" PK", columnNameList);
       }
@@ -388,12 +388,49 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
   }
 
-  static final public void referentialConstraint() throws ParseException {
+  static final public void referentialConstraint(String referencingTableName) throws ParseException {
+  String referencingColumnNameList;
+  String referencedTableName;
+  String referencedColumnNameList;
+  String databaseName;
     jj_consume_token(FOREIGN_KEY);
-    columnNameList();
+    referencingColumnNameList = columnNameList();
+    databaseName = myDatabase.getDatabaseName();
+    myDatabase.close();
+    myDatabase = myDbEnvironment.openDatabase(null, referencingTableName, dbConfig);
+
+    if(!columnValidation(referencingTableName, referencingColumnNameList, true))
+    {
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);
+    }
     jj_consume_token(REFERENCES);
-    tableName();
-    columnNameList();
+    referencedTableName = tableName();
+    databaseName = myDatabase.getDatabaseName();
+    myDatabase.close();
+    myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
+    if(findKeyValue(referencedTableName))
+    {
+      ;
+    }
+    else
+    {
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      addErrorMsg("Create table has failed: foreign key references non existing table");
+      myDatabase.close();
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);
+    }
+    referencedColumnNameList = columnNameList();
+    if(!columnValidation(referencedTableName, referencedColumnNameList, false))
+    {
+      addErrorMsg("Create table has failed: foreign key references non existing column");
+      databaseName = myDatabase.getDatabaseName();
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);
+    }
   }
 
   static final public String columnNameList() throws ParseException {

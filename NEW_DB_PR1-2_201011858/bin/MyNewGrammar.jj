@@ -149,8 +149,9 @@ public class SimpleDBMSParser
 	cursor.close();
   }
 
-  static public boolean pkColumnValidation(String tableName, String columnNameList)
+  static public boolean columnValidation(String tableName, String columnNameList, boolean addMsg)
   {
+    
     String columnName;
     String[] columnNameListArray = columnNameList.split(" ");
     int columnNameListLength = columnNameListArray.length;
@@ -161,7 +162,7 @@ public class SimpleDBMSParser
       if(!findKeyValue(tableName+" "+columnName))
       {
         result = false;
-        addErrorMsg("Create table has failed: \'"+columnName+"\' does not exists in column definition");      }    }
+        if(addMsg) addErrorMsg("Create table has failed: \'"+columnName+"\' does not exists in column definition");      }    }
 
     return result;  }
 
@@ -291,10 +292,8 @@ void createTableQuery() :
       myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }
     else
     {
-//      putKeyValue(tableName, tableName);
       myDatabase.close();
-      myDatabase = myDbEnvironment.openDatabase(null, tableName, dbConfig);    }
-      }
+      myDatabase = myDbEnvironment.openDatabase(null, tableName, dbConfig);    }  }
   tableElementList(tableName)
   {
     currentTableName = tableName;
@@ -355,7 +354,7 @@ void tableConstraintDefinition(String tableName) :
 {}
 {
   primaryKeyConstraint(tableName)
-| referentialConstraint()
+| referentialConstraint(tableName)
 }
 
 void primaryKeyConstraint(String tableName) :
@@ -376,7 +375,7 @@ void primaryKeyConstraint(String tableName) :
       myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }
     else
     {
-      if(pkColumnValidation(tableName, columnNameList))
+      if(columnValidation(tableName, columnNameList, true))
       {
         putKeyValue(tableName+" PK", columnNameList);      }
       else
@@ -387,14 +386,49 @@ void primaryKeyConstraint(String tableName) :
       	myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);      }    }  }
 }
 
-void referentialConstraint() :
-{}
+void referentialConstraint(String referencingTableName) :
+{
+  String referencingColumnNameList;
+  String referencedTableName;
+  String referencedColumnNameList;
+  String databaseName;
+}
 {
   < FOREIGN_KEY >
-  columnNameList()
+  referencingColumnNameList = columnNameList()
+  {
+    databaseName = myDatabase.getDatabaseName();
+    myDatabase.close();
+    myDatabase = myDbEnvironment.openDatabase(null, referencingTableName, dbConfig);
+    
+    if(!columnValidation(referencingTableName, referencingColumnNameList, true))
+    {
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }  }
   < REFERENCES >
-  tableName()
-  columnNameList()
+  referencedTableName = tableName()
+  {
+    databaseName = myDatabase.getDatabaseName();
+    myDatabase.close();
+    myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
+    if(findKeyValue(referencedTableName))    {
+      ;    }
+    else    {
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      addErrorMsg("Create table has failed: foreign key references non existing table");
+      myDatabase.close();
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }  }
+  referencedColumnNameList = columnNameList()
+  {
+    if(!columnValidation(referencedTableName, referencedColumnNameList, false))
+    {
+      addErrorMsg("Create table has failed: foreign key references non existing column");
+      databaseName = myDatabase.getDatabaseName();
+      myDatabase.close();
+      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }  }
 }
 
 String columnNameList() :
