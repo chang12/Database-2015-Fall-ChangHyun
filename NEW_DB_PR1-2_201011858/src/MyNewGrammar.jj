@@ -8,6 +8,7 @@ PARSER_BEGIN(SimpleDBMSParser)
 
 import java.io.File;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 
 // Import libraries from Berkeley DB
 import com.sleepycat.je.Database;
@@ -26,6 +27,8 @@ public class SimpleDBMSParser
 {
   public static final int PRINT_SYNTAX_ERROR = 0;
   public static final int PRINT_CREATE_TABLE = 1;
+  
+  public static final int PRINT_DESC = 3;
 
   public static String errorMsg;
   public static String currentTableName;
@@ -44,11 +47,10 @@ public class SimpleDBMSParser
     envConfig.setAllowCreate(true);
     myDbEnvironment = new Environment(new File("db/"), envConfig);
 
-    // Open Database or if not, create one.
+    // Set database configuration
 	dbConfig = new DatabaseConfig();
     dbConfig.setAllowCreate(true);
     dbConfig.setSortedDuplicates(false);
-//    myDatabase = myDbEnvironment.openDatabase(null, "sampleDatabase", dbConfig);
     
     SimpleDBMSParser parser = new SimpleDBMSParser(System.in);
 
@@ -72,48 +74,42 @@ public class SimpleDBMSParser
     switch(q)
     {
       case PRINT_SYNTAX_ERROR:
-      	if(myDatabase != null)
-      	{
-      	  String databaseName = myDatabase.getDatabaseName();
-      	  System.out.println("db: "+myDatabase);
-      	  System.out.println("name: "+databaseName);
-      	  myDatabase.close();
-      	  myDbEnvironment.removeDatabase(null, databaseName);
-      	}
+      	if(!currentTableName.equals("")) myDbEnvironment.removeDatabase(null, currentTableName);
       	System.out.println("Syntax error");
       	break;
       case PRINT_CREATE_TABLE:
-      	if(errorMsg=="")      	{
-      	  myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
-      	  putKeyValue(currentTableName, currentTableName);
-      	  myDatabase.close();      	  System.out.println("\'"+currentTableName+"\' table is created");
+      	if(errorMsg.equals(""))      	{
+      	  putKeyValue("@TABLELIST", currentTableName, currentTableName);      	  System.out.println("\'"+currentTableName+"\' table is created");
       	}
       	else      	{
       	  System.out.println(errorMsg);
       	  myDbEnvironment.removeDatabase(null, "@TEMP");      	}
       	break;
+      case PRINT_DESC:
+      	break;
     }
   }
 
-  static public boolean findKeyValue(String keyString)
+  static public boolean findKeyValue(String dbName, String keyString)
   {
     Cursor cursor = null;
+    myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
-		
+
 	DatabaseEntry foundKey;
 	DatabaseEntry foundValue;
-		
+
 	boolean result = false;
 			
 	try{
 		foundKey = new DatabaseEntry(keyString.getBytes("UTF-8"));
 		foundValue = new DatabaseEntry();
-		
+
 		if(cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT)==OperationStatus.SUCCESS){
-			result = true;
+		  result = true;
 		}
 		else{
-			result = false;
+		  result = false;
 		}
 		
 	} catch(DatabaseException de){
@@ -123,11 +119,13 @@ public class SimpleDBMSParser
 	}
 
 	cursor.close();
+	myDatabase.close();
 	return result;  }
   
-  static public void putKeyValue(String keyString, String valueString)
+  static public void putKeyValue(String dbName, String keyString, String valueString)
   {
     Cursor cursor = null;
+    myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
 		
 	DatabaseEntry key;
@@ -147,24 +145,99 @@ public class SimpleDBMSParser
 	}
 
 	cursor.close();
+	myDatabase.close();
   }
 
-  static public boolean columnValidation(String tableName, String columnNameList, boolean addMsg)
+  static public boolean keyListValidation(String dbName, String keyList, boolean addMsg)
   {
-    
-    String columnName;
-    String[] columnNameListArray = columnNameList.split(" ");
-    int columnNameListLength = columnNameListArray.length;
+    String key;
+    String[] keyArray = keyList.split(" ");
+    int keyArrayLength = keyArray.length;
     boolean result = true;
 
-    for(int i=0;i<columnNameListLength;i++)    {
-      columnName = columnNameListArray[i];
-      if(!findKeyValue(tableName+" "+columnName))
+    for(int i=0;i<keyArrayLength;i++)    {
+      key = keyArray[i];
+      if(!findKeyValue(dbName, key))
       {
         result = false;
-        if(addMsg) addErrorMsg("Create table has failed: \'"+columnName+"\' does not exists in column definition");      }    }
-
+        if(addMsg) addErrorMsg("Create table has failed: \'"+key+"\' does not exists in column definition");
+        break;      }    }
+    
     return result;  }
+
+  static public void setDefaultPk(String dbName)
+  {
+    if(findKeyValue(dbName, "@PK"))
+    {
+      ;    }
+    else    {
+      Cursor cursor = null;
+      myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
+      cursor = myDatabase.openCursor(null, null);
+       
+      String totalKeyList = "";
+
+      DatabaseEntry foundKey = new DatabaseEntry();
+      DatabaseEntry foundValue = new DatabaseEntry();
+
+      cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
+
+      do
+      {
+        try {
+          String keyString = new String(foundKey.getData(), "UTF-8");
+          String valueString = new String(foundValue.getData(), "UTF-8");
+
+          totalKeyList += (keyString+" ");
+          
+        } catch(UnsupportedEncodingException e){
+          e.printStackTrace();        }
+      } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
+
+      totalKeyList = totalKeyList.substring(0, totalKeyList.length()-1);
+      
+      cursor.close();
+      myDatabase.close();
+
+      putKeyValue(dbName, "@PK", totalKeyList);
+          }  }
+
+  static public boolean foreignKeyValidation(String dbName, String keyList)
+  {
+    Cursor cursor = null;
+    myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
+    cursor = myDatabase.openCursor(null, null);
+
+    DatabaseEntry foundKey;
+	DatabaseEntry foundValue;
+
+	String[] keyArray = keyList.split(" ");
+
+	boolean result = false;
+			
+	try{
+	  foundKey = new DatabaseEntry("@PK".getBytes("UTF-8"));
+	  foundValue = new DatabaseEntry();
+
+	  cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT).toString();
+	  String primaryKey = new String(foundValue.getData(), "UTF-8");
+	  String[] primaryKeyArray = primaryKey.split(" ");
+
+	  if(keyArray.length==primaryKeyArray.length)
+	  {
+	    Arrays.sort(keyArray);
+	    Arrays.sort(primaryKeyArray);
+	    if(Arrays.equals(keyArray, primaryKeyArray)) result = true;
+	  }
+	} catch(DatabaseException de){
+		de.printStackTrace();
+	} catch(UnsupportedEncodingException e){
+		e.printStackTrace();
+	}
+
+	cursor.close();
+	myDatabase.close();
+	return result;  }
 
   static public void deletePair(String tableName)
   {
@@ -188,11 +261,39 @@ public class SimpleDBMSParser
         e.printStackTrace();      }
     } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);  }
 
+  static public void descTable(String dbName)
+  {
+    Cursor cursor = null;
+    myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
+    cursor = myDatabase.openCursor(null, null);
+
+    DatabaseEntry foundKey = new DatabaseEntry();
+    DatabaseEntry foundValue = new DatabaseEntry();
+
+    cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
+
+    System.out.println("desc table "+dbName+": ");
+    do
+    {
+      try {
+        String keyString = new String(foundKey.getData(), "UTF-8");
+      	String valueString = new String(foundValue.getData(), "UTF-8");
+      	System.out.println(keyString+": "+valueString);
+      } catch(UnsupportedEncodingException e){
+        e.printStackTrace();
+      }
+
+    } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
+    
+    cursor.close();
+    myDatabase.close();  }
+
   static public void addErrorMsg(String msg)
   {
-    if(errorMsg=="")
+    if(errorMsg.equals(""))
     {
       errorMsg = msg;    }  }
+
 }
 
 PARSER_END(SimpleDBMSParser)
@@ -206,6 +307,7 @@ TOKEN : /* Keywords */
 | < CHAR : "char" >
 | < DATE : "date" >
 | < CREATE_TABLE : "create table" >
+| < DESC : "desc" >
 | < NOT_NULL : "not null" >
 | < PRIMARY_KEY : "primary key" >
 | < FOREIGN_KEY : "foreign key" >
@@ -264,6 +366,9 @@ int query() :
     createTableQuery()
     {
       q = PRINT_CREATE_TABLE;    }
+  | descQuery()
+    {
+      q = PRINT_DESC;    }
   )
   (
     {
@@ -275,29 +380,16 @@ int query() :
 void createTableQuery() :
 {
   String tableName;
-  boolean result;
 }
 {
   < CREATE_TABLE >
   tableName = tableName()
   {
     errorMsg = "";
-  	currentTableName = "";
-  	myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
-
-    if(findKeyValue(tableName))
-    {
-      addErrorMsg("Create table has failed: table with the same name already exists");
-      myDatabase.close();
-      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }
-    else
-    {
-      myDatabase.close();
-      myDatabase = myDbEnvironment.openDatabase(null, tableName, dbConfig);    }  }
+    currentTableName = "";    if(findKeyValue("@TABLELIST", tableName))    {      addErrorMsg("Create table has failed: table with the same name already exists");      currentTableName = "@TEMP";    }    else    {      currentTableName = tableName;    }  }
   tableElementList(tableName)
   {
-    currentTableName = tableName;
-    myDatabase.close();  }
+    setDefaultPk(currentTableName);  }
 }
 
 void tableElementList(String tableName) :
@@ -321,8 +413,6 @@ void tableElement(String tableName) :
 
 void columnDefinition(String tableName) :
 {
-  String attributeKey;
-  String attributeValue;
   String columnName;
   String dataType;
   String databaseName;
@@ -332,22 +422,19 @@ void columnDefinition(String tableName) :
 {
   columnName = columnName()
   dataType = dataType()
+  {
+    dataType += " Y";  }
   (
     < NOT_NULL >
     {
-      dataType+=" notnull";    }
+      dataType = dataType.substring(0, dataType.length()-1)+"N";    }
   )?
   {
-    attributeKey = tableName+" "+columnName;
-    attributeValue = dataType;
-
-    if(findKeyValue(attributeKey))    {
+    if(findKeyValue(currentTableName, dataType))    {
       addErrorMsg("Create table has failed: column definition is duplicated");
-      databaseName = myDatabase.getDatabaseName();
-      myDatabase.close();
-      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
-      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }    else    {
-      putKeyValue(attributeKey, attributeValue);    }  }
+      myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
+      currentTableName = "@TEMP";    }    else    {
+      putKeyValue(currentTableName, columnName, dataType);    }  }
 }
 
 void tableConstraintDefinition(String tableName) :
@@ -366,24 +453,20 @@ void primaryKeyConstraint(String tableName) :
   < PRIMARY_KEY >
   columnNameList = columnNameList()
   {
-    if(findKeyValue(tableName+" PK"))
+    if(findKeyValue(currentTableName, "@PK"))
     {
       addErrorMsg("Create table has failed: primary key definition is duplicated");
-      databaseName = myDatabase.getDatabaseName();
-      myDatabase.close();
-      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
-      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }
+      myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
+      currentTableName = "@TEMP";    }
     else
     {
-      if(columnValidation(tableName, columnNameList, true))
+      if(keyListValidation(currentTableName, columnNameList, true))
       {
-        putKeyValue(tableName+" PK", columnNameList);      }
+        putKeyValue(currentTableName, "@PK", columnNameList);      }
       else
       {
-        databaseName = myDatabase.getDatabaseName();
-      	myDatabase.close();
-      	myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
-      	myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);      }    }  }
+      	myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
+      	currentTableName = "@TEMP";      }    }  }
 }
 
 void referentialConstraint(String referencingTableName) :
@@ -396,56 +479,45 @@ void referentialConstraint(String referencingTableName) :
 {
   < FOREIGN_KEY >
   referencingColumnNameList = columnNameList()
-  {
-    databaseName = myDatabase.getDatabaseName();
-    myDatabase.close();
-    myDatabase = myDbEnvironment.openDatabase(null, referencingTableName, dbConfig);
-    
-    if(!columnValidation(referencingTableName, referencingColumnNameList, true))
+  { 
+    if(!keyListValidation(currentTableName, referencingColumnNameList, true))
     {
-      myDatabase.close();
-      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
-      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }  }
+      myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
+      currentTableName = "@TEMP";    }  }
   < REFERENCES >
   referencedTableName = tableName()
   {
-    databaseName = myDatabase.getDatabaseName();
-    myDatabase.close();
-    myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
-    if(findKeyValue(referencedTableName))    {
-      ;    }
-    else    {
-      myDatabase.close();
-      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
+    if(!findKeyValue("@TABLELIST", referencedTableName))    {
+      myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
       addErrorMsg("Create table has failed: foreign key references non existing table");
-      myDatabase.close();
-      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }  }
+      currentTableName = "@TEMP";    }  }
   referencedColumnNameList = columnNameList()
   {
-    if(!columnValidation(referencedTableName, referencedColumnNameList, false))
+    if(!keyListValidation(referencedTableName, referencedColumnNameList, false))
     {
       addErrorMsg("Create table has failed: foreign key references non existing column");
-      databaseName = myDatabase.getDatabaseName();
-      myDatabase.close();
-      myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
-      myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);    }  }
+      myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
+      currentTableName = "@TEMP";    }
+    if(!foreignKeyValidation(referencedTableName, referencedColumnNameList))
+    {
+      addErrorMsg("Create table has failed: foreign key references non primary key column");
+      myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
+      currentTableName = "@TEMP";    }  }
 }
 
 String columnNameList() :
 {
-  String columnNameList = "";
+  String columnNameList;
   String columnName;
 }
 {
   < LEFT_PAREN >
-  columnName = columnName()
-  {
-    columnNameList += (columnName+" ");  }
+  columnNameList = columnName()
   (
     < COMMA >
     columnName = columnName()
     {
-      columnNameList += (columnName+" ");    }
+      columnNameList += (" "+columnName);    }
   )*
   < RIGHT_PAREN >
   {
@@ -456,7 +528,6 @@ String dataType() :
 {
   Token intValueToken;
   int intValue;
-  String databaseName;
 }
 {
   < INT >
@@ -471,10 +542,8 @@ String dataType() :
       intValue = Integer.parseInt(intValueToken.image);
       if(intValue<1)      {
         addErrorMsg("Char length should be > 0");
-        databaseName = myDatabase.getDatabaseName();
-      	myDatabase.close();
-      	myDbEnvironment.renameDatabase(null, databaseName, "@TEMP");
-      	myDatabase = myDbEnvironment.openDatabase(null, "@TEMP", dbConfig);      }
+      	myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
+      	currentTableName = "@TEMP";      }
       return ("char "+intValue);    }
   )
 | < DATE >
@@ -501,3 +570,13 @@ String columnName() :
   {
     return columnName.image;  }
 }
+
+void descQuery() :
+{
+  String tableName;
+}
+{
+  < DESC >
+  tableName = tableName()
+  {
+    descTable(tableName);  }}

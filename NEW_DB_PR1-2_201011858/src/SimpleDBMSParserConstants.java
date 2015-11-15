@@ -19,31 +19,33 @@ public interface SimpleDBMSParserConstants {
   /** RegularExpression Id. */
   int CREATE_TABLE = 9;
   /** RegularExpression Id. */
-  int NOT_NULL = 10;
+  int DESC = 10;
   /** RegularExpression Id. */
-  int PRIMARY_KEY = 11;
+  int NOT_NULL = 11;
   /** RegularExpression Id. */
-  int FOREIGN_KEY = 12;
+  int PRIMARY_KEY = 12;
   /** RegularExpression Id. */
-  int REFERENCES = 13;
+  int FOREIGN_KEY = 13;
   /** RegularExpression Id. */
-  int SEMICOLON = 14;
+  int REFERENCES = 14;
   /** RegularExpression Id. */
-  int LEFT_PAREN = 15;
+  int SEMICOLON = 15;
   /** RegularExpression Id. */
-  int RIGHT_PAREN = 16;
+  int LEFT_PAREN = 16;
   /** RegularExpression Id. */
-  int COMMA = 17;
+  int RIGHT_PAREN = 17;
   /** RegularExpression Id. */
-  int UNDERSCORE = 18;
+  int COMMA = 18;
   /** RegularExpression Id. */
-  int SIGN = 19;
+  int UNDERSCORE = 19;
   /** RegularExpression Id. */
-  int INT_VALUE = 20;
+  int SIGN = 20;
   /** RegularExpression Id. */
-  int LEGAL_IDENTIFIER = 21;
+  int INT_VALUE = 21;
   /** RegularExpression Id. */
-  int ALPHABET = 22;
+  int LEGAL_IDENTIFIER = 22;
+  /** RegularExpression Id. */
+  int ALPHABET = 23;
 
   /** Lexical state. */
   int DEFAULT = 0;
@@ -60,6 +62,7 @@ public interface SimpleDBMSParserConstants {
     "\"char\"",
     "\"date\"",
     "\"create table\"",
+    "\"desc\"",
     "\"not null\"",
     "\"primary key\"",
     "\"foreign key\"",
