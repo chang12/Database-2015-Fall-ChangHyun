@@ -364,46 +364,27 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     myDatabase.close();
   }
 
-  static public void addReference(String referencingTable, String referencedTable)
+  static public void addForeignKey(String referencingTable, String columnNameList, String referencedTable)
   {
-    Cursor cursor = null;
-    myDatabase = myDbEnvironment.openDatabase(null, referencedTable, dbConfig);
-    cursor = myDatabase.openCursor(null, null);
-    DatabaseEntry foundKey;
-    DatabaseEntry foundValue;
-    String currentFk = "";
-    try
+    //no FK settings - > getValue will return " "    String currentFk = getValue(referencedTable, "@FK");
+    currentFk += (referencingTable+" ");
+    putKeyValue(referencedTable, "@FK", currentFk);
+
+
+    String[] columnNameArray = columnNameList.split(" ");
+    for(int i=0;i<columnNameArray.length;i++)
     {
-      foundKey = new DatabaseEntry("@FK".getBytes("UTF-8"));
-      foundValue = new DatabaseEntry();
-      if (cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
-      {
-        currentFk = new String(foundValue.getData(), "UTF-8");
-        cursor.delete();
-      }
-      else
-      {
-        currentFk = "";
-      }
+      String currentDataType = getValue(referencingTable, columnNameArray[i]);
+      String updatedDataType = currentDataType + " FOR";
+      putKeyValue(referencingTable, columnNameArray[i], updatedDataType);
     }
-    catch (DatabaseException de)
-    {
-      de.printStackTrace();
-    }
-    catch (UnsupportedEncodingException e)
-    {
-      e.printStackTrace();
-    }
-    cursor.close();
-    myDatabase.close();
-    putKeyValue(referencedTable, "@FK", currentFk + referencingTable + " ");
   }
 
   static public boolean checkFk(String dbName)
   {
     String fkList = getValue(dbName, "@FK");
     String [] fkArray = fkList.split(" ");
-    if (fkArray [0].equals(""))
+    if (fkArray[0].equals(""))
     {
       return false;
     }
@@ -722,7 +703,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
     if (!currentTableName.equals("@TEMP"))
     {
-      addReference(currentTableName, referencedTableName);
+      addForeignKey(currentTableName, referencingColumnNameList, referencedTableName);
     }
   }
 
@@ -845,6 +826,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   String tableName;
     jj_consume_token(DESC);
     tableName = tableName();
+    System.out.println("----------------------------");
     descTable(tableName);
   }
 
