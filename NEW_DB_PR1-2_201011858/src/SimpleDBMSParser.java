@@ -2,50 +2,50 @@
 import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
-
 // Import libraries from Berkeley DB
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.DatabaseConfig;
 import com.sleepycat.je.Cursor;
-
 import com.sleepycat.je.Environment;
 import com.sleepycat.je.EnvironmentConfig;
-
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 
 public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   public static final int PRINT_SYNTAX_ERROR = 0;
+
   public static final int PRINT_CREATE_TABLE = 1;
+
+  public static final int PRINT_DROP_TABLE = 2;
 
   public static final int PRINT_DESC = 3;
 
   public static String errorMsg;
+
   public static String currentTableName;
 
   public static Environment myDbEnvironment = null;
+
   public static EnvironmentConfig envConfig;
+
   public static Database myDatabase = null;
+
   public static DatabaseConfig dbConfig;
 
-  public static void main(String args[]) throws ParseException
+  public static void main(String args []) throws ParseException
   {
     /* OPENING DB */
-
     // Open Database Environment or if not, create one.
-        envConfig = new EnvironmentConfig();
+    envConfig = new EnvironmentConfig();
     envConfig.setAllowCreate(true);
     myDbEnvironment = new Environment(new File("db/"), envConfig);
-
     // Set database configuration
-        dbConfig = new DatabaseConfig();
+    dbConfig = new DatabaseConfig();
     dbConfig.setAllowCreate(true);
     dbConfig.setSortedDuplicates(false);
-
     SimpleDBMSParser parser = new SimpleDBMSParser(System.in);
-
     while (true)
     {
       try
@@ -63,26 +63,32 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   public static void printMessage(int q)
   {
-    switch(q)
+    switch (q)
     {
-      case PRINT_SYNTAX_ERROR:
-        if(!currentTableName.equals("")) myDbEnvironment.removeDatabase(null, currentTableName);
-        System.out.println("Syntax error");
-        break;
-      case PRINT_CREATE_TABLE:
-        if(errorMsg.equals(""))
-        {
-          putKeyValue("@TABLELIST", currentTableName, currentTableName);
-          System.out.println("\u005c'"+currentTableName+"\u005c' table is created");
-        }
-        else
-        {
-          System.out.println(errorMsg);
-          myDbEnvironment.removeDatabase(null, "@TEMP");
-        }
-        break;
-      case PRINT_DESC:
-        break;
+      case PRINT_SYNTAX_ERROR :
+      if (!currentTableName.equals(""))
+      {
+        System.out.println(currentTableName);
+        myDbEnvironment.removeDatabase(null, currentTableName);
+      }
+      System.out.println("Syntax error");
+      break;
+      case PRINT_CREATE_TABLE :
+      if (errorMsg.equals(""))
+      {
+        putKeyValue("@TABLELIST", currentTableName, currentTableName);
+        System.out.println("\u005c'" + currentTableName + "\u005c' table is created");
+      }
+      else
+      {
+        System.out.println(errorMsg);
+        myDbEnvironment.removeDatabase(null, "@TEMP");
+      }
+      break;
+      case PRINT_DROP_TABLE :
+      break;
+      case PRINT_DESC :
+      break;
     }
   }
 
@@ -91,32 +97,33 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
-
-        DatabaseEntry foundKey;
-        DatabaseEntry foundValue;
-
-        boolean result = false;
-
-        try{
-                foundKey = new DatabaseEntry(keyString.getBytes("UTF-8"));
-                foundValue = new DatabaseEntry();
-
-                if(cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT)==OperationStatus.SUCCESS){
-                  result = true;
-                }
-                else{
-                  result = false;
-                }
-
-        } catch(DatabaseException de){
-                de.printStackTrace();
-        } catch(UnsupportedEncodingException e){
-                e.printStackTrace();
-        }
-
-        cursor.close();
-        myDatabase.close();
-        return result;
+    DatabaseEntry foundKey;
+    DatabaseEntry foundValue;
+    boolean result = false;
+    try
+    {
+      foundKey = new DatabaseEntry(keyString.getBytes("UTF-8"));
+      foundValue = new DatabaseEntry();
+      if (cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
+      {
+        result = true;
+      }
+      else
+      {
+        result = false;
+      }
+    }
+    catch (DatabaseException de)
+    {
+      de.printStackTrace();
+    }
+    catch (UnsupportedEncodingException e)
+    {
+      e.printStackTrace();
+    }
+    cursor.close();
+    myDatabase.close();
+    return result;
   }
 
   static public void putKeyValue(String dbName, String keyString, String valueString)
@@ -124,51 +131,113 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
-
-        DatabaseEntry key;
-        DatabaseEntry value;
-
-        boolean result = false;
-
-        try{
-          key = new DatabaseEntry(keyString.getBytes("UTF-8"));
-          value = new DatabaseEntry(valueString.getBytes("UTF-8"));
-          cursor.put(key, value);
-
-        } catch(DatabaseException de){
-          de.printStackTrace();
-        } catch(UnsupportedEncodingException e){
-          e.printStackTrace();
-        }
-
-        cursor.close();
-        myDatabase.close();
+    DatabaseEntry key;
+    DatabaseEntry value;
+    boolean result = false;
+    try
+    {
+      key = new DatabaseEntry(keyString.getBytes("UTF-8"));
+      value = new DatabaseEntry(valueString.getBytes("UTF-8"));
+      cursor.put(key, value);
+    }
+    catch (DatabaseException de)
+    {
+      de.printStackTrace();
+    }
+    catch (UnsupportedEncodingException e)
+    {
+      e.printStackTrace();
+    }
+    cursor.close();
+    myDatabase.close();
   }
+
+  static public String getValue(String dbName, String keyString)
+  {
+    Cursor cursor = null;
+    myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
+    cursor = myDatabase.openCursor(null, null);
+    DatabaseEntry foundKey;
+    DatabaseEntry foundValue;
+    String result = "";
+    try
+    {
+      foundKey = new DatabaseEntry(keyString.getBytes("UTF-8"));
+      foundValue = new DatabaseEntry();
+      if (cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
+      {
+        result = new String(foundValue.getData(), "UTF-8");
+      }
+      else
+      {
+        result = "";
+      }
+    }
+    catch (DatabaseException de)
+    {
+      de.printStackTrace();
+    }
+    catch (UnsupportedEncodingException e)
+    {
+      e.printStackTrace();
+    }
+    cursor.close();
+    myDatabase.close();
+    return result;
+  }
+
+  static public void deleteKeyValue(String dbName, String keyString)
+  {
+    Cursor cursor = null;
+    myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
+    cursor = myDatabase.openCursor(null, null);
+    DatabaseEntry foundKey;
+    DatabaseEntry foundValue;
+    try
+    {
+      foundKey = new DatabaseEntry(keyString.getBytes("UTF-8"));
+      foundValue = new DatabaseEntry();
+      if (cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
+      {
+        cursor.delete();
+      }
+    }
+    catch (DatabaseException de)
+    {
+      de.printStackTrace();
+    }
+    catch (UnsupportedEncodingException e)
+    {
+      e.printStackTrace();
+    }
+    cursor.close();
+    myDatabase.close();
+  }
+
+
 
   static public boolean keyListValidation(String dbName, String keyList, boolean addMsg)
   {
     String key;
-    String[] keyArray = keyList.split(" ");
+    String [] keyArray = keyList.split(" ");
     int keyArrayLength = keyArray.length;
     boolean result = true;
-
-    for(int i=0;i<keyArrayLength;i++)
+    for (int i = 0; i < keyArrayLength; i++)
     {
-      key = keyArray[i];
-      if(!findKeyValue(dbName, key))
+      key = keyArray [i];
+      if (!findKeyValue(dbName, key))
       {
         result = false;
-        if(addMsg) addErrorMsg("Create table has failed: \u005c'"+key+"\u005c' does not exists in column definition");
+        if (addMsg) addErrorMsg("Create table has failed: \u005c'" + key + "\u005c' does not exists in column definition");
         break;
       }
     }
-
     return result;
   }
 
-  static public void setDefaultPk(String dbName)
+  static public void setDefaultPkFk(String dbName)
   {
-    if(findKeyValue(dbName, "@PK"))
+    if (findKeyValue(dbName, "@PK"))
     {
       ;
     }
@@ -177,100 +246,95 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       Cursor cursor = null;
       myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
       cursor = myDatabase.openCursor(null, null);
-
       String totalKeyList = "";
-
       DatabaseEntry foundKey = new DatabaseEntry();
       DatabaseEntry foundValue = new DatabaseEntry();
-
       cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
-
       do
       {
-        try {
+        try
+        {
           String keyString = new String(foundKey.getData(), "UTF-8");
           String valueString = new String(foundValue.getData(), "UTF-8");
-
-          totalKeyList += (keyString+" ");
-
-        } catch(UnsupportedEncodingException e){
+          valueString += " PRI";
+          foundValue.setData(valueString.getBytes());
+          cursor.put(foundKey, foundValue);
+          totalKeyList += (keyString + " ");
+        }
+        catch (UnsupportedEncodingException e)
+        {
           e.printStackTrace();
         }
-      } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
-
-      totalKeyList = totalKeyList.substring(0, totalKeyList.length()-1);
-
+      }
+      while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
+      totalKeyList = totalKeyList.substring(0, totalKeyList.length() - 1);
       cursor.close();
       myDatabase.close();
-
       putKeyValue(dbName, "@PK", totalKeyList);
-
     }
+    putKeyValue(dbName, "@FK", "");
   }
 
   static public boolean foreignKeyValidation(String dbName, String keyList)
   {
-    Cursor cursor = null;
-    myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
-    cursor = myDatabase.openCursor(null, null);
-
-    DatabaseEntry foundKey;
-        DatabaseEntry foundValue;
-
-        String[] keyArray = keyList.split(" ");
-
-        boolean result = false;
-
-        try{
-          foundKey = new DatabaseEntry("@PK".getBytes("UTF-8"));
-          foundValue = new DatabaseEntry();
-
-          cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT).toString();
-          String primaryKey = new String(foundValue.getData(), "UTF-8");
-          String[] primaryKeyArray = primaryKey.split(" ");
-
-          if(keyArray.length==primaryKeyArray.length)
-          {
-            Arrays.sort(keyArray);
-            Arrays.sort(primaryKeyArray);
-            if(Arrays.equals(keyArray, primaryKeyArray)) result = true;
-          }
-        } catch(DatabaseException de){
-                de.printStackTrace();
-        } catch(UnsupportedEncodingException e){
-                e.printStackTrace();
-        }
-
-        cursor.close();
-        myDatabase.close();
-        return result;
+    boolean result = false;
+    String primaryKey = getValue(dbName, "@PK");
+    String [] primaryKeyArray = primaryKey.split(" ");
+    String [] keyArray = keyList.split(" ");
+    if (keyArray.length == primaryKeyArray.length)
+    {
+      Arrays.sort(keyArray);
+      Arrays.sort(primaryKeyArray);
+      if (Arrays.equals(keyArray, primaryKeyArray)) result = true;
+    }
+    return result;
   }
 
-  static public void deletePair(String tableName)
+  static public boolean referenceDataTypeValidation(String dbName1, String keyList1, String dbName2, String keyList2)
   {
-    Cursor cursor = null;
-    cursor = myDatabase.openCursor(null, null);
-
-    DatabaseEntry foundKey = new DatabaseEntry();
-    DatabaseEntry foundValue = new DatabaseEntry();
-
-    cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
-
-    do
+    boolean result = true;
+    String [] keyArray1 = keyList1.split(" ");
+    String [] keyArray2 = keyList2.split(" ");
+    if (keyArray1.length == keyArray2.length)
     {
-      try {
-        String keyString = new String(foundKey.getData(), "UTF-8");
-        String valueString = new String(foundValue.getData(), "UTF-8");
-
-        if (keyString.split(" ")[0].equals(tableName))
+      for (int i = 0; i < keyArray1.length; i++)
+      {
+        String [] attrDataType1 = getValue(dbName1, keyArray1 [i]).split(" ");
+        String [] attrDataType2 = getValue(dbName2, keyArray2 [i]).split(" ");
+        boolean typeMatch = attrDataType1 [0].equals(attrDataType2 [0]);
+        boolean sizeMatch = attrDataType1 [1].equals(attrDataType2 [1]);
+        if (!(typeMatch && sizeMatch))
         {
-          cursor.delete();
+          result = false;
+          break;
         }
-      } catch(UnsupportedEncodingException e){
-        e.printStackTrace();
       }
+    }
+    else
+    {
+      result = false;
+    }
+    return result;
+  }
 
-    } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
+  static public void addPrimaryKey(String dbName, String columnNameList)
+  {
+    String[] columnNameArray = columnNameList.split(" ");
+    Arrays.sort(columnNameArray);
+
+    for(int i=0;i<columnNameArray.length;i++)
+    {
+      String valueString = getValue(dbName, columnNameArray[i]);
+      valueString += " PRI";
+      putKeyValue(dbName, columnNameArray[i], valueString);
+    }
+
+    putKeyValue(dbName, "@PK", columnNameList);
+  }
+
+  static public void descTableList(String dbNameList)
+  {
+
   }
 
   static public void descTable(String dbName)
@@ -278,32 +342,149 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
-
     DatabaseEntry foundKey = new DatabaseEntry();
     DatabaseEntry foundValue = new DatabaseEntry();
-
     cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
-
-    System.out.println("desc table "+dbName+": ");
+    System.out.println("desc table " + dbName + ": ");
     do
     {
-      try {
+      try
+      {
         String keyString = new String(foundKey.getData(), "UTF-8");
         String valueString = new String(foundValue.getData(), "UTF-8");
-        System.out.println(keyString+": "+valueString);
-      } catch(UnsupportedEncodingException e){
+        System.out.println(keyString + ": " + valueString);
+      }
+      catch (UnsupportedEncodingException e)
+      {
         e.printStackTrace();
       }
-
-    } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
-
+    }
+    while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
     cursor.close();
     myDatabase.close();
   }
 
+  static public void addReference(String referencingTable, String referencedTable)
+  {
+    Cursor cursor = null;
+    myDatabase = myDbEnvironment.openDatabase(null, referencedTable, dbConfig);
+    cursor = myDatabase.openCursor(null, null);
+    DatabaseEntry foundKey;
+    DatabaseEntry foundValue;
+    String currentFk = "";
+    try
+    {
+      foundKey = new DatabaseEntry("@FK".getBytes("UTF-8"));
+      foundValue = new DatabaseEntry();
+      if (cursor.getSearchKey(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
+      {
+        currentFk = new String(foundValue.getData(), "UTF-8");
+        cursor.delete();
+      }
+      else
+      {
+        currentFk = "";
+      }
+    }
+    catch (DatabaseException de)
+    {
+      de.printStackTrace();
+    }
+    catch (UnsupportedEncodingException e)
+    {
+      e.printStackTrace();
+    }
+    cursor.close();
+    myDatabase.close();
+    putKeyValue(referencedTable, "@FK", currentFk + referencingTable + " ");
+  }
+
+  static public boolean checkFk(String dbName)
+  {
+    String fkList = getValue(dbName, "@FK");
+    String [] fkArray = fkList.split(" ");
+    if (fkArray [0].equals(""))
+    {
+      return false;
+    }
+    else
+    {
+      return true;
+    }
+  }
+
+  static public void dropTable(String dbName)
+  {
+    if (dbName.equals("*"))
+    {
+      String totalTableList = "";
+      Cursor cursor = null;
+      myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
+      cursor = myDatabase.openCursor(null, null);
+      DatabaseEntry foundKey = new DatabaseEntry();
+      DatabaseEntry foundValue = new DatabaseEntry();
+      if (cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
+      {
+        do
+        {
+          try
+          {
+            String tableName = new String(foundKey.getData(), "UTF-8");
+            totalTableList += (tableName + " ");
+          }
+          catch (DatabaseException de)
+          {
+            System.out.println(de.getMessage());
+          }
+          catch (UnsupportedEncodingException e)
+          {
+            System.out.println(e.getMessage());
+          }
+        } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
+
+        cursor.close();
+        myDatabase.close();
+
+        String [] totalTableArray = totalTableList.split(" ");
+        for (int i = 0; i < totalTableArray.length; i++)
+        {
+          System.out.println(totalTableArray [i]);
+          System.out.println(myDbEnvironment.getDatabaseNames());
+          myDbEnvironment.removeDatabase(null, totalTableArray [i]);
+        }
+        myDbEnvironment.removeDatabase(null, "@TABLELIST");
+      }
+      System.out.println("Every table is dropped");
+    }
+    else
+    {
+      String [] dbNameArray = dbName.split(" ");
+      for (int i = 0; i < dbNameArray.length; i++)
+      {
+        if (findKeyValue("@TABLELIST", dbNameArray [i]))
+        {
+          if (checkFk(dbNameArray [i]))
+          {
+            System.out.println("Drop table has failed: '" + dbNameArray [i] + "'is referenced by other table");
+          }
+          else
+          {
+            myDbEnvironment.removeDatabase(null, dbNameArray [i]);
+            deleteKeyValue("@TABLELIST", dbNameArray [i]);
+            System.out.println("'" + dbNameArray [i] + "' table is dropped");
+          }
+        }
+        else
+        {
+          System.out.println("No such table named '" + dbNameArray [i] + "'");
+        }
+      }
+    }
+  }
+
   static public void addErrorMsg(String msg)
   {
-    if(errorMsg.equals(""))
+    if (errorMsg.equals(""))
     {
       errorMsg = msg;
     }
@@ -312,6 +493,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   static final public void command() throws ParseException {
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case CREATE_TABLE:
+    case DROP_TABLE:
     case DESC:
       queryList();
       break;
@@ -339,6 +521,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       printMessage(q);
       switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
       case CREATE_TABLE:
+      case DROP_TABLE:
       case DESC:
         ;
         break;
@@ -351,10 +534,15 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   static final public int query() throws ParseException {
   int q;
+  currentTableName = "";
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case CREATE_TABLE:
       createTableQuery();
       q = PRINT_CREATE_TABLE;
+      break;
+    case DROP_TABLE:
+      dropTableQuery();
+      q = PRINT_DROP_TABLE;
       break;
     case DESC:
       descQuery();
@@ -365,7 +553,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       jj_consume_token(-1);
       throw new ParseException();
     }
-      {if (true) return q;}
+    {if (true) return q;}
     throw new Error("Missing return statement in function");
   }
 
@@ -374,9 +562,8 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     jj_consume_token(CREATE_TABLE);
     tableName = tableName();
     errorMsg = "";
-    currentTableName = "";
-
-    if(findKeyValue("@TABLELIST", tableName))
+    //    currentTableName = "";
+    if (findKeyValue("@TABLELIST", tableName))
     {
       addErrorMsg("Create table has failed: table with the same name already exists");
       currentTableName = "@TEMP";
@@ -386,7 +573,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       currentTableName = tableName;
     }
     tableElementList(tableName);
-    setDefaultPk(currentTableName);
+    setDefaultPkFk(currentTableName);
   }
 
   static final public void tableElementList(String tableName) throws ParseException {
@@ -428,7 +615,6 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   String columnName;
   String dataType;
   String databaseName;
-
   boolean result;
     columnName = columnName();
     dataType = dataType();
@@ -436,13 +622,13 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case NOT_NULL:
       jj_consume_token(NOT_NULL);
-      dataType = dataType.substring(0, dataType.length()-1)+"N";
+      dataType = dataType.substring(0, dataType.length() - 1) + "N";
       break;
     default:
       jj_la1[5] = jj_gen;
       ;
     }
-    if(findKeyValue(currentTableName, dataType))
+    if (findKeyValue(currentTableName, dataType))
     {
       addErrorMsg("Create table has failed: column definition is duplicated");
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
@@ -474,7 +660,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   String databaseName;
     jj_consume_token(PRIMARY_KEY);
     columnNameList = columnNameList();
-    if(findKeyValue(currentTableName, "@PK"))
+    if (findKeyValue(currentTableName, "@PK"))
     {
       addErrorMsg("Create table has failed: primary key definition is duplicated");
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
@@ -482,9 +668,10 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
     else
     {
-      if(keyListValidation(currentTableName, columnNameList, true))
+      if (keyListValidation(currentTableName, columnNameList, true))
       {
-        putKeyValue(currentTableName, "@PK", columnNameList);
+        addPrimaryKey(currentTableName, columnNameList);
+//        putKeyValue(currentTableName, "@PK", columnNameList);
       }
       else
       {
@@ -501,31 +688,41 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   String databaseName;
     jj_consume_token(FOREIGN_KEY);
     referencingColumnNameList = columnNameList();
-    if(!keyListValidation(currentTableName, referencingColumnNameList, true))
+    if (!keyListValidation(currentTableName, referencingColumnNameList, true))
     {
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
       currentTableName = "@TEMP";
     }
     jj_consume_token(REFERENCES);
     referencedTableName = tableName();
-    if(!findKeyValue("@TABLELIST", referencedTableName))
+    if (!findKeyValue("@TABLELIST", referencedTableName))
     {
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
       addErrorMsg("Create table has failed: foreign key references non existing table");
       currentTableName = "@TEMP";
     }
     referencedColumnNameList = columnNameList();
-    if(!keyListValidation(referencedTableName, referencedColumnNameList, false))
+    if (!keyListValidation(referencedTableName, referencedColumnNameList, false))
     {
       addErrorMsg("Create table has failed: foreign key references non existing column");
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
       currentTableName = "@TEMP";
     }
-    if(!foreignKeyValidation(referencedTableName, referencedColumnNameList))
+    else if (!foreignKeyValidation(referencedTableName, referencedColumnNameList))
     {
       addErrorMsg("Create table has failed: foreign key references non primary key column");
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
       currentTableName = "@TEMP";
+    }
+    else if (!referenceDataTypeValidation(currentTableName, referencingColumnNameList, referencedTableName, referencedColumnNameList))
+    {
+      addErrorMsg("Create table has failed: foreign key references wrong type");
+      myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
+      currentTableName = "@TEMP";
+    }
+    if (!currentTableName.equals("@TEMP"))
+    {
+      addReference(currentTableName, referencedTableName);
     }
   }
 
@@ -546,7 +743,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       }
       jj_consume_token(COMMA);
       columnName = columnName();
-      columnNameList += (" "+columnName);
+      columnNameList += (" " + columnName);
     }
     jj_consume_token(RIGHT_PAREN);
     {if (true) return columnNameList;}
@@ -567,13 +764,13 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       intValueToken = jj_consume_token(INT_VALUE);
       jj_consume_token(RIGHT_PAREN);
       intValue = Integer.parseInt(intValueToken.image);
-      if(intValue<1)
+      if (intValue < 1)
       {
         addErrorMsg("Char length should be > 0");
         myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
         currentTableName = "@TEMP";
       }
-      {if (true) return ("char "+intValue);}
+      {if (true) return ("char " + intValue);}
       break;
     case DATE:
       jj_consume_token(DATE);
@@ -581,6 +778,40 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       break;
     default:
       jj_la1[8] = jj_gen;
+      jj_consume_token(-1);
+      throw new ParseException();
+    }
+    throw new Error("Missing return statement in function");
+  }
+
+  static final public String tableNameList() throws ParseException {
+  String tableNameList;
+  String tableName;
+    switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
+    case STAR:
+      jj_consume_token(STAR);
+    {if (true) return "*";}
+      break;
+    case LEGAL_IDENTIFIER:
+      tableNameList = tableName();
+      label_4:
+      while (true) {
+        switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
+        case COMMA:
+          ;
+          break;
+        default:
+          jj_la1[9] = jj_gen;
+          break label_4;
+        }
+        jj_consume_token(COMMA);
+        tableName = tableName();
+        tableNameList += (" " + tableName);
+      }
+    {if (true) return tableNameList;}
+      break;
+    default:
+      jj_la1[10] = jj_gen;
       jj_consume_token(-1);
       throw new ParseException();
     }
@@ -601,6 +832,15 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     throw new Error("Missing return statement in function");
   }
 
+  static final public void dropTableQuery() throws ParseException {
+  String tableNameList;
+    jj_consume_token(DROP_TABLE);
+    errorMsg = "";
+    tableNameList = tableNameList();
+    System.out.println(tableNameList);
+    dropTable(tableNameList);
+  }
+
   static final public void descQuery() throws ParseException {
   String tableName;
     jj_consume_token(DESC);
@@ -618,13 +858,13 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   static public Token jj_nt;
   static private int jj_ntk;
   static private int jj_gen;
-  static final private int[] jj_la1 = new int[9];
+  static final private int[] jj_la1 = new int[11];
   static private int[] jj_la1_0;
   static {
       jj_la1_init_0();
    }
    private static void jj_la1_init_0() {
-      jj_la1_0 = new int[] {0x620,0x600,0x600,0x40000,0x403000,0x800,0x3000,0x40000,0x1c0,};
+      jj_la1_0 = new int[] {0xe20,0xe00,0xe00,0x80000,0x1006000,0x1000,0x6000,0x80000,0x1c0,0x80000,0x1400000,};
    }
 
   /** Constructor with InputStream. */
@@ -645,7 +885,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 9; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 11; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -659,7 +899,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 9; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 11; i++) jj_la1[i] = -1;
   }
 
   /** Constructor. */
@@ -676,7 +916,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 9; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 11; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -686,7 +926,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 9; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 11; i++) jj_la1[i] = -1;
   }
 
   /** Constructor with generated Token Manager. */
@@ -702,7 +942,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 9; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 11; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -711,7 +951,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 9; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 11; i++) jj_la1[i] = -1;
   }
 
   static private Token jj_consume_token(int kind) throws ParseException {
@@ -762,12 +1002,12 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   /** Generate ParseException. */
   static public ParseException generateParseException() {
     jj_expentries.clear();
-    boolean[] la1tokens = new boolean[24];
+    boolean[] la1tokens = new boolean[26];
     if (jj_kind >= 0) {
       la1tokens[jj_kind] = true;
       jj_kind = -1;
     }
-    for (int i = 0; i < 9; i++) {
+    for (int i = 0; i < 11; i++) {
       if (jj_la1[i] == jj_gen) {
         for (int j = 0; j < 32; j++) {
           if ((jj_la1_0[i] & (1<<j)) != 0) {
@@ -776,7 +1016,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         }
       }
     }
-    for (int i = 0; i < 24; i++) {
+    for (int i = 0; i < 26; i++) {
       if (la1tokens[i]) {
         jj_expentry = new int[1];
         jj_expentry[0] = i;
