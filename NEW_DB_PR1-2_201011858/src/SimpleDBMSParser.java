@@ -351,29 +351,72 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   static public void descTableList(String dbNameList)
   {
-    String[] dbNameArray = dbNameList.split(" ");
-
-    boolean isError = false;
-    for(int i=0;i<dbNameArray.length;i++)
+    if(dbNameList.equals("*"))
     {
-      if(!findKeyValue("@TABLELIST", dbNameArray[i]))
+      String totalTableList = "";
+      Cursor cursor = null;
+      myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
+      cursor = myDatabase.openCursor(null, null);
+      DatabaseEntry foundKey = new DatabaseEntry();
+      DatabaseEntry foundValue = new DatabaseEntry();
+      if (cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
       {
-        isError = true;
-        break;
+        do
+        {
+          try
+          {
+            String tableName = new String(foundKey.getData(), "UTF-8");
+            totalTableList += (tableName + " ");
+          }
+          catch (DatabaseException de)
+          {
+            System.out.println(de.getMessage());
+          }
+          catch (UnsupportedEncodingException e)
+          {
+            System.out.println(e.getMessage());
+          }
+        }
+        while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
+        cursor.close();
+        myDatabase.close();
+        String [] totalTableArray = totalTableList.split(" ");
+        System.out.println("---------------------------------------------");
+        for (int i = 0; i < totalTableArray.length; i++)
+        {
+          descTable(totalTableArray[i]);
+        }
       }
-    }
-
-    if (!isError)
-    {
-      System.out.println("---------------------------------------------");
-      for (int i = 0; i < dbNameArray.length; i++)
+      else
       {
-        descTable(dbNameArray[i]);
+        cursor.close();
+        myDatabase.close();
       }
     }
     else
     {
-      System.out.println("No such table");
+      String [] dbNameArray = dbNameList.split(" ");
+      boolean isError = false;
+      for (int i = 0; i < dbNameArray.length; i++)
+      {
+        if (!findKeyValue("@TABLELIST", dbNameArray [i]))
+        {
+          isError = true;
+          break;
+        }
+      }
+      if (!isError)
+      {
+        System.out.println("---------------------------------------------");
+        for (int i = 0; i < dbNameArray.length; i++)
+        {
+          descTable(dbNameArray [i]);
+        }
+      }
+      else
+      {
+        System.out.println("No such table");
+      }
     }
   }
 
@@ -481,12 +524,14 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   {
     if (dbName.equals("*"))
     {
+
       String totalTableList = "";
       Cursor cursor = null;
       myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
       cursor = myDatabase.openCursor(null, null);
       DatabaseEntry foundKey = new DatabaseEntry();
       DatabaseEntry foundValue = new DatabaseEntry();
+
       if (cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
       {
         do
@@ -512,9 +557,14 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         String [] totalTableArray = totalTableList.split(" ");
         for (int i = 0; i < totalTableArray.length; i++)
         {
-          myDbEnvironment.removeDatabase(null, totalTableArray [i]);
+          myDbEnvironment.removeDatabase(null, totalTableArray[i]);
         }
         myDbEnvironment.removeDatabase(null, "@TABLELIST");
+      }
+      else
+      {
+        cursor.close();
+        myDatabase.close();
       }
       System.out.println("Every table is dropped");
     }
@@ -894,14 +944,14 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   static final public String tableName() throws ParseException {
   Token tableName;
     tableName = jj_consume_token(LEGAL_IDENTIFIER);
-    {if (true) return tableName.image;}
+    {if (true) return tableName.image.toLowerCase();}
     throw new Error("Missing return statement in function");
   }
 
   static final public String columnName() throws ParseException {
   Token columnName;
     columnName = jj_consume_token(LEGAL_IDENTIFIER);
-    {if (true) return columnName.image;}
+    {if (true) return columnName.image.toLowerCase();}
     throw new Error("Missing return statement in function");
   }
 
