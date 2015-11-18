@@ -255,10 +255,20 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         {
           String keyString = new String(foundKey.getData(), "UTF-8");
           String valueString = new String(foundValue.getData(), "UTF-8");
-          valueString += " PRI";
-          foundValue.setData(valueString.getBytes());
-          cursor.put(foundKey, foundValue);
-          totalKeyList += (keyString + " ");
+          if(!keyString.substring(0,1).equals("@"))
+          {
+            String[] valueArray = valueString.split(" ");
+            valueArray[2] = "N";
+            String newValueString = "";
+            for(int j=0;j<valueArray.length;j++)
+            {
+              newValueString += (valueArray[j]+" ");
+            }
+            newValueString += "PRI";
+            foundValue.setData(newValueString.getBytes());
+            cursor.put(foundKey, foundValue);
+            totalKeyList += (keyString + " ");
+          }
         }
         catch (UnsupportedEncodingException e)
         {
@@ -271,7 +281,8 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       myDatabase.close();
       putKeyValue(dbName, "@PK", totalKeyList);
     }
-    putKeyValue(dbName, "@FK", "");
+    if(!findKeyValue(dbName,"@REFER")) putKeyValue(dbName, "@REFER", "");
+    putKeyValue(dbName, "@REFERED", "");
   }
 
   static public boolean foreignKeyValidation(String dbName, String keyList)
@@ -324,7 +335,14 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     for(int i=0;i<columnNameArray.length;i++)
     {
       String valueString = getValue(dbName, columnNameArray[i]);
-      valueString += " PRI";
+      String[] valueArray = valueString.split(" ");
+      valueArray[2] = "N";
+      valueString="";
+      for(int j=0;j<valueArray.length;j++)
+      {
+        valueString += (valueArray[j]+" ");
+      }
+      valueString += "PRI";
       putKeyValue(dbName, columnNameArray[i], valueString);
     }
 
@@ -369,6 +387,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
     cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
     cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
+    cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
 
     System.out.println("table_name ["+dbName+"]");
     System.out.println("column_name\u005cttype\u005ctnull\u005ctkey");
@@ -390,10 +409,15 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
           System.out.print(keyString+"\u005ct"+valueArray[0]+"\u005ct"+valueArray[2]+"\u005ct");
         }
 
+        if(valueArray.length==3)
+        {
+          System.out.println("");
+        }
         if(valueArray.length==4)
         {
           System.out.println(valueArray[3]);
         }
+
         if(valueArray.length==5)
         {
           System.out.println(valueArray[3]+"\u005ct"+valueArray[4]);
@@ -403,8 +427,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       {
         e.printStackTrace();
       }
-    }
-    while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
+    } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
     System.out.println("---------------------------------------------");
 
     cursor.close();
@@ -413,9 +436,13 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   static public void addForeignKey(String referencingTable, String columnNameList, String referencedTable)
   {
-    //no FK settings - > getValue will return " "    String currentFk = getValue(referencedTable, "@FK");
-    currentFk += (referencingTable+" ");
-    putKeyValue(referencedTable, "@FK", currentFk);
+    String currentRefered = getValue(referencedTable, "@REFERED");
+    currentRefered += (referencingTable+" ");
+    putKeyValue(referencedTable, "@REFERED", currentRefered);
+
+    String currentRefer = getValue(referencingTable, "@REFER");
+    currentRefer += (referencedTable+" ");
+    putKeyValue(referencingTable, "@REFER", currentRefer);
 
 
     String[] columnNameArray = columnNameList.split(" ");
@@ -427,18 +454,27 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
   }
 
-  static public boolean checkFk(String dbName)
+  static public void removeReference(String referencedTable, String referencingTable)
   {
-    String fkList = getValue(dbName, "@FK");
-    String [] fkArray = fkList.split(" ");
-    if (fkArray[0].equals(""))
+    String referingList = getValue(referencedTable, "@REFERED");
+    String[] referingArray = referingList.split(" ");
+
+    int i;
+    for(i=0;i<referingArray.length;i++)
     {
-      return false;
+      if(referingArray[i].equals(referencingTable)) break;
     }
-    else
+
+    referingArray[i]="";
+    String newReferingList = "";
+
+    for(int j=0;j<referingArray.length;j++)
     {
-      return true;
+      newReferingList += (referingArray[j]+" ");
     }
+    newReferingList = newReferingList.substring(0, newReferingList.length()-1);
+
+    putKeyValue(referencedTable, "@REFERED", newReferingList);
   }
 
   static public void dropTable(String dbName)
@@ -489,14 +525,26 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       {
         if (findKeyValue("@TABLELIST", dbNameArray [i]))
         {
-          if (checkFk(dbNameArray [i]))
+          if (!getValue(dbNameArray [i], "@REFERED").equals(""))
           {
+            System.out.println(getValue(dbNameArray [i], "@REFERED")+"end");
             System.out.println("Drop table has failed: '" + dbNameArray [i] + "'is referenced by other table");
           }
           else
           {
+            if(!getValue(dbNameArray[i], "@REFER").equals(""))
+            {
+              String referedList = getValue(dbNameArray[i], "@REFER");
+              String[] referedArray = referedList.split(" ");
+              for(int j=0;j<referedArray.length;j++)
+              {
+                removeReference(referedArray[j], dbNameArray[i]);
+              }
+            }
+
             myDbEnvironment.removeDatabase(null, dbNameArray [i]);
             deleteKeyValue("@TABLELIST", dbNameArray [i]);
+
             System.out.println("'" + dbNameArray [i] + "' table is dropped");
           }
         }
