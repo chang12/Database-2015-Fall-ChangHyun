@@ -15,37 +15,35 @@ import com.sleepycat.je.OperationStatus;
 
 public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   public static final int PRINT_SYNTAX_ERROR = 0;
-
   public static final int PRINT_CREATE_TABLE = 1;
-
   public static final int PRINT_DROP_TABLE = 2;
-
   public static final int PRINT_DESC = 3;
 
   public static String errorMsg;
-
   public static String currentTableName;
-
   public static Environment myDbEnvironment = null;
-
   public static EnvironmentConfig envConfig;
-
   public static Database myDatabase = null;
-
   public static DatabaseConfig dbConfig;
 
   public static void main(String args []) throws ParseException
   {
-    /* OPENING DB */
+    /* OPENING DB Environment */
+
     // Open Database Environment or if not, create one.
     envConfig = new EnvironmentConfig();
     envConfig.setAllowCreate(true);
     myDbEnvironment = new Environment(new File("db/"), envConfig);
+
     // Set database configuration
     dbConfig = new DatabaseConfig();
     dbConfig.setAllowCreate(true);
     dbConfig.setSortedDuplicates(false);
+
+    /* DB Setting Finished */
+
     SimpleDBMSParser parser = new SimpleDBMSParser(System.in);
+
     while (true)
     {
       try
@@ -66,28 +64,29 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     switch (q)
     {
       case PRINT_SYNTAX_ERROR :
-      if (!currentTableName.equals(""))
-      {
-        myDbEnvironment.removeDatabase(null, currentTableName);
-      }
-      System.out.println("Syntax error");
-      break;
+
+        if (!currentTableName.equals(""))
+        {
+          myDbEnvironment.removeDatabase(null, currentTableName);
+        }
+        System.out.println("Syntax error");
+        break;
       case PRINT_CREATE_TABLE :
-      if (errorMsg.equals(""))
-      {
-        putKeyValue("@TABLELIST", currentTableName, currentTableName);
-        System.out.println("\u005c'" + currentTableName + "\u005c' table is created");
-      }
-      else
-      {
-        System.out.println(errorMsg);
-        myDbEnvironment.removeDatabase(null, "@TEMP");
-      }
-      break;
+        if (errorMsg.equals(""))
+        {
+          putKeyValue("@TABLELIST", currentTableName, currentTableName);
+          System.out.println("\u005c'" + currentTableName + "\u005c' table is created");
+        }
+        else
+        {
+          System.out.println(errorMsg);
+          myDbEnvironment.removeDatabase(null, "@TEMP");
+        }
+        break;
       case PRINT_DROP_TABLE :
-      break;
+        break;
       case PRINT_DESC :
-      break;
+        break;
     }
   }
 
@@ -96,9 +95,12 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
+
     DatabaseEntry foundKey;
     DatabaseEntry foundValue;
+
     boolean result = false;
+
     try
     {
       foundKey = new DatabaseEntry(keyString.getBytes("UTF-8"));
@@ -130,9 +132,10 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
+
     DatabaseEntry key;
     DatabaseEntry value;
-    boolean result = false;
+
     try
     {
       key = new DatabaseEntry(keyString.getBytes("UTF-8"));
@@ -156,8 +159,10 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
+
     DatabaseEntry foundKey;
     DatabaseEntry foundValue;
+
     String result = "";
     try
     {
@@ -190,8 +195,10 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
+
     DatabaseEntry foundKey;
     DatabaseEntry foundValue;
+
     try
     {
       foundKey = new DatabaseEntry(keyString.getBytes("UTF-8"));
@@ -212,8 +219,6 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     cursor.close();
     myDatabase.close();
   }
-
-
 
   static public boolean keyListValidation(String dbName, String keyList, boolean addMsg)
   {
@@ -236,11 +241,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   static public void setDefaultPkFk(String dbName)
   {
-    if (findKeyValue(dbName, "@PK"))
-    {
-      ;
-    }
-    else
+    if (!findKeyValue(dbName, "@PK"))
     {
       Cursor cursor = null;
       myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
@@ -281,11 +282,12 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       myDatabase.close();
       putKeyValue(dbName, "@PK", totalKeyList);
     }
+
     if(!findKeyValue(dbName,"@REFER")) putKeyValue(dbName, "@REFER", "");
     putKeyValue(dbName, "@REFERED", "");
   }
 
-  static public boolean foreignKeyValidation(String dbName, String keyList)
+  static public boolean referencePkValidation(String dbName, String keyList)
   {
     boolean result = false;
     String primaryKey = getValue(dbName, "@PK");
@@ -349,48 +351,39 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     putKeyValue(dbName, "@PK", columnNameList);
   }
 
+  static public void addForeignKey(String referencingTable, String columnNameList, String referencedTable)
+  {
+    String currentRefered = getValue(referencedTable, "@REFERED");
+    currentRefered += (referencingTable+" ");
+    putKeyValue(referencedTable, "@REFERED", currentRefered);
+
+    String currentRefer = getValue(referencingTable, "@REFER");
+    currentRefer += (referencedTable+" ");
+    putKeyValue(referencingTable, "@REFER", currentRefer);
+
+
+    String[] columnNameArray = columnNameList.split(" ");
+    for(int i=0;i<columnNameArray.length;i++)
+    {
+      String currentDataType = getValue(referencingTable, columnNameArray[i]);
+      String updatedDataType = currentDataType + " FOR";
+      putKeyValue(referencingTable, columnNameArray[i], updatedDataType);
+    }
+  }
+
   static public void descTableList(String dbNameList)
   {
     if(dbNameList.equals("*"))
     {
-      String totalTableList = "";
-      Cursor cursor = null;
-      myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
-      cursor = myDatabase.openCursor(null, null);
-      DatabaseEntry foundKey = new DatabaseEntry();
-      DatabaseEntry foundValue = new DatabaseEntry();
-      if (cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
+      String totalTableList = getValue("@TABLELIST", "@ALL");
+      if (!totalTableList.equals(""))
       {
-        do
-        {
-          try
-          {
-            String tableName = new String(foundKey.getData(), "UTF-8");
-            totalTableList += (tableName + " ");
-          }
-          catch (DatabaseException de)
-          {
-            System.out.println(de.getMessage());
-          }
-          catch (UnsupportedEncodingException e)
-          {
-            System.out.println(e.getMessage());
-          }
-        }
-        while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
-        cursor.close();
-        myDatabase.close();
         String [] totalTableArray = totalTableList.split(" ");
         System.out.println("---------------------------------------------");
         for (int i = 0; i < totalTableArray.length; i++)
         {
           descTable(totalTableArray[i]);
         }
-      }
-      else
-      {
-        cursor.close();
-        myDatabase.close();
       }
     }
     else
@@ -425,8 +418,10 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
     cursor = myDatabase.openCursor(null, null);
+
     DatabaseEntry foundKey = new DatabaseEntry();
     DatabaseEntry foundValue = new DatabaseEntry();
+
     cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
     cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
     cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
@@ -452,18 +447,17 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
           System.out.print(keyString+"\u005ct"+valueArray[0]+"\u005ct"+valueArray[2]+"\u005ct");
         }
 
-        if(valueArray.length==3)
+        switch (valueArray.length)
         {
-          System.out.println("");
-        }
-        if(valueArray.length==4)
-        {
-          System.out.println(valueArray[3]);
-        }
-
-        if(valueArray.length==5)
-        {
-          System.out.println(valueArray[3]+"\u005ct"+valueArray[4]);
+          case 3 :
+                System.out.println("");
+                break;
+          case 4 :
+                System.out.println(valueArray[3]);
+                break;
+          case 5 :
+                System.out.println(valueArray[3]+"\u005ct"+valueArray[4]);
+                break;
         }
       }
       catch (UnsupportedEncodingException e)
@@ -477,94 +471,20 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     myDatabase.close();
   }
 
-  static public void addForeignKey(String referencingTable, String columnNameList, String referencedTable)
-  {
-    String currentRefered = getValue(referencedTable, "@REFERED");
-    currentRefered += (referencingTable+" ");
-    putKeyValue(referencedTable, "@REFERED", currentRefered);
-
-    String currentRefer = getValue(referencingTable, "@REFER");
-    currentRefer += (referencedTable+" ");
-    putKeyValue(referencingTable, "@REFER", currentRefer);
-
-
-    String[] columnNameArray = columnNameList.split(" ");
-    for(int i=0;i<columnNameArray.length;i++)
-    {
-      String currentDataType = getValue(referencingTable, columnNameArray[i]);
-      String updatedDataType = currentDataType + " FOR";
-      putKeyValue(referencingTable, columnNameArray[i], updatedDataType);
-    }
-  }
-
-  static public void removeReference(String referencedTable, String referencingTable)
-  {
-    String referingList = getValue(referencedTable, "@REFERED");
-    String[] referingArray = referingList.split(" ");
-
-    int i;
-    for(i=0;i<referingArray.length;i++)
-    {
-      if(referingArray[i].equals(referencingTable)) break;
-    }
-
-    referingArray[i]="";
-    String newReferingList = "";
-
-    for(int j=0;j<referingArray.length;j++)
-    {
-      newReferingList += (referingArray[j]+" ");
-    }
-    newReferingList = newReferingList.substring(0, newReferingList.length()-1);
-
-    putKeyValue(referencedTable, "@REFERED", newReferingList);
-  }
-
   static public void dropTable(String dbName)
   {
     if (dbName.equals("*"))
     {
+      String totalTableList = getValue("@TABLELIST", "@ALL");
 
-      String totalTableList = "";
-      Cursor cursor = null;
-      myDatabase = myDbEnvironment.openDatabase(null, "@TABLELIST", dbConfig);
-      cursor = myDatabase.openCursor(null, null);
-      DatabaseEntry foundKey = new DatabaseEntry();
-      DatabaseEntry foundValue = new DatabaseEntry();
-
-      if (cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS)
+      if(!totalTableList.equals(""))
       {
-        do
-        {
-          try
-          {
-            String tableName = new String(foundKey.getData(), "UTF-8");
-            totalTableList += (tableName + " ");
-          }
-          catch (DatabaseException de)
-          {
-            System.out.println(de.getMessage());
-          }
-          catch (UnsupportedEncodingException e)
-          {
-            System.out.println(e.getMessage());
-          }
-        } while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
-
-        cursor.close();
-        myDatabase.close();
-
         String [] totalTableArray = totalTableList.split(" ");
         for (int i = 0; i < totalTableArray.length; i++)
         {
-          myDbEnvironment.removeDatabase(null, totalTableArray[i]);
+          myDbEnvironment.removeDatabase(null, totalTableArray [i]);
         }
         myDbEnvironment.removeDatabase(null, "@TABLELIST");
-      }
-      else
-      {
-        cursor.close();
-        myDatabase.close();
       }
       System.out.println("Every table is dropped");
     }
@@ -577,7 +497,6 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         {
           if (!getValue(dbNameArray [i], "@REFERED").equals(""))
           {
-            System.out.println(getValue(dbNameArray [i], "@REFERED")+"end");
             System.out.println("Drop table has failed: '" + dbNameArray [i] + "'is referenced by other table");
           }
           else
@@ -588,12 +507,13 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
               String[] referedArray = referedList.split(" ");
               for(int j=0;j<referedArray.length;j++)
               {
-                removeReference(referedArray[j], dbNameArray[i]);
+                deletePartialValue(referedArray[j], "@REFERED", dbNameArray[i]);
               }
             }
 
             myDbEnvironment.removeDatabase(null, dbNameArray [i]);
             deleteKeyValue("@TABLELIST", dbNameArray [i]);
+            deletePartialValue("@TABLELIST", "@ALL", dbNameArray[i]);
 
             System.out.println("'" + dbNameArray [i] + "' table is dropped");
           }
@@ -611,6 +531,40 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     if (errorMsg.equals(""))
     {
       errorMsg = msg;
+    }
+  }
+
+  static public void addTableName(String tableName)
+  {
+    if(!tableName.equals("@TEMP"))
+    {
+      String currentTableNameList = getValue("@TABLELIST","@ALL");
+      String newTableNameList = currentTableNameList+tableName+" ";
+      putKeyValue("@TABLELIST", "@ALL", newTableNameList);
+    }
+  }
+
+  static public void deletePartialValue(String dbName, String keyString, String valueToDelete)
+  {
+    String valueList = getValue(dbName, keyString);
+    String[] valueArray = valueList.split(" ");
+
+    int i;
+    for(i=0;i<valueArray.length;i++)
+    {
+      if(valueArray[i].equals(valueToDelete)) break;
+    }
+
+    if(i!=valueArray.length)
+    {
+      valueArray[i] = "";
+      String newValueList = "";
+      for (int j = 0; j < valueArray.length; j++)
+      {
+        newValueList += (valueArray[j] + " ");
+      }
+      newValueList = newValueList.substring(0, newValueList.length() - 1);
+      putKeyValue(dbName, keyString, newValueList);
     }
   }
 
@@ -686,7 +640,6 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     jj_consume_token(CREATE_TABLE);
     tableName = tableName();
     errorMsg = "";
-    //    currentTableName = "";
     if (findKeyValue("@TABLELIST", tableName))
     {
       addErrorMsg("Create table has failed: table with the same name already exists");
@@ -698,6 +651,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
     tableElementList(tableName);
     setDefaultPkFk(currentTableName);
+    addTableName(currentTableName);
   }
 
   static final public void tableElementList(String tableName) throws ParseException {
@@ -831,7 +785,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
       currentTableName = "@TEMP";
     }
-    else if (!foreignKeyValidation(referencedTableName, referencedColumnNameList))
+    else if (!referencePkValidation(referencedTableName, referencedColumnNameList))
     {
       addErrorMsg("Create table has failed: foreign key references non primary key column");
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
