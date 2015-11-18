@@ -68,7 +68,6 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       case PRINT_SYNTAX_ERROR :
       if (!currentTableName.equals(""))
       {
-        System.out.println(currentTableName);
         myDbEnvironment.removeDatabase(null, currentTableName);
       }
       System.out.println("Syntax error");
@@ -334,7 +333,30 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   static public void descTableList(String dbNameList)
   {
+    String[] dbNameArray = dbNameList.split(" ");
 
+    boolean isError = false;
+    for(int i=0;i<dbNameArray.length;i++)
+    {
+      if(!findKeyValue("@TABLELIST", dbNameArray[i]))
+      {
+        isError = true;
+        break;
+      }
+    }
+
+    if (!isError)
+    {
+      System.out.println("---------------------------------------------");
+      for (int i = 0; i < dbNameArray.length; i++)
+      {
+        descTable(dbNameArray[i]);
+      }
+    }
+    else
+    {
+      System.out.println("No such table");
+    }
   }
 
   static public void descTable(String dbName)
@@ -345,14 +367,37 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     DatabaseEntry foundKey = new DatabaseEntry();
     DatabaseEntry foundValue = new DatabaseEntry();
     cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
-    System.out.println("desc table " + dbName + ": ");
+    cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
+    cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
+
+    System.out.println("table_name ["+dbName+"]");
+    System.out.println("column_name\u005cttype\u005ctnull\u005ctkey");
+
     do
     {
       try
       {
         String keyString = new String(foundKey.getData(), "UTF-8");
         String valueString = new String(foundValue.getData(), "UTF-8");
-        System.out.println(keyString + ": " + valueString);
+        String[] valueArray = valueString.split(" ");
+
+        if(valueArray[0].equals("char"))
+        {
+          System.out.print(keyString+"\u005ctchar("+valueArray[1]+")\u005ct"+valueArray[2]+"\u005ct");
+        }
+        else
+        {
+          System.out.print(keyString+"\u005ct"+valueArray[0]+"\u005ct"+valueArray[2]+"\u005ct");
+        }
+
+        if(valueArray.length==4)
+        {
+          System.out.println(valueArray[3]);
+        }
+        if(valueArray.length==5)
+        {
+          System.out.println(valueArray[3]+"\u005ct"+valueArray[4]);
+        }
       }
       catch (UnsupportedEncodingException e)
       {
@@ -360,6 +405,8 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       }
     }
     while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
+    System.out.println("---------------------------------------------");
+
     cursor.close();
     myDatabase.close();
   }
@@ -429,8 +476,6 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         String [] totalTableArray = totalTableList.split(" ");
         for (int i = 0; i < totalTableArray.length; i++)
         {
-          System.out.println(totalTableArray [i]);
-          System.out.println(myDbEnvironment.getDatabaseNames());
           myDbEnvironment.removeDatabase(null, totalTableArray [i]);
         }
         myDbEnvironment.removeDatabase(null, "@TABLELIST");
@@ -652,7 +697,6 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       if (keyListValidation(currentTableName, columnNameList, true))
       {
         addPrimaryKey(currentTableName, columnNameList);
-//        putKeyValue(currentTableName, "@PK", columnNameList);
       }
       else
       {
@@ -818,16 +862,14 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     jj_consume_token(DROP_TABLE);
     errorMsg = "";
     tableNameList = tableNameList();
-    System.out.println(tableNameList);
     dropTable(tableNameList);
   }
 
   static final public void descQuery() throws ParseException {
-  String tableName;
+  String tableNameList;
     jj_consume_token(DESC);
-    tableName = tableName();
-    System.out.println("----------------------------");
-    descTable(tableName);
+    tableNameList = tableNameList();
+    descTableList(tableNameList);
   }
 
   static private boolean jj_initialized_once = false;
