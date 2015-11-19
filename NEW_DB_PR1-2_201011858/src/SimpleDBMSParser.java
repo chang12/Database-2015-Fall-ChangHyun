@@ -21,10 +21,10 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   public static String errorMsg;
   public static String currentTableName;
-  public static Environment myDbEnvironment = null;
   public static EnvironmentConfig envConfig;
-  public static Database myDatabase = null;
+  public static Environment myDbEnvironment = null;
   public static DatabaseConfig dbConfig;
+  public static Database myDatabase = null;
 
   public static void main(String args []) throws ParseException
   {
@@ -64,16 +64,16 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     switch (q)
     {
       case PRINT_SYNTAX_ERROR :
-
-        if (!currentTableName.equals(""))
+        // query processing 도중에 syntax error가 발생한 경우, currentTableName이 저장되어 있는 상태다.        // 무효한 table이므로 remove 해주고, syntax error 메시지를 출력한다.        if (!currentTableName.equals(""))
         {
           myDbEnvironment.removeDatabase(null, currentTableName);
         }
         System.out.println("Syntax error");
         break;
       case PRINT_CREATE_TABLE :
-        if (errorMsg.equals(""))
+        // errorMsg가 공란이 아니라는 것은, create table query의 grammar는 맞았지만 semantic 오류가 있다는 뜻이다.        // semantic 오류가 있었다면, table 이름은 @TEMP로 rename 되어있을 것이다.        // 그러므로 @TEMP 이름의 table을 remove 해준다.           if (errorMsg.equals(""))
         {
+
           putKeyValue("@TABLELIST", currentTableName, currentTableName);
           System.out.println("\u005c'" + currentTableName + "\u005c' table is created");
         }
@@ -90,7 +90,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
   }
 
-  static public boolean findKeyValue(String dbName, String keyString)
+  // dbName의 database를 열어서, keyString을 key로 하는 key-value pair가 있는지를 True/False로 반환한다.  static public boolean findKeyValue(String dbName, String keyString)
   {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
@@ -127,7 +127,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     return result;
   }
 
-  static public void putKeyValue(String dbName, String keyString, String valueString)
+  // dbName의 database에 <keyString, valueString >의 pair를 넣는다.  static public void putKeyValue(String dbName, String keyString, String valueString)
   {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
@@ -154,7 +154,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     myDatabase.close();
   }
 
-  static public String getValue(String dbName, String keyString)
+  // dbName의 테이블에서, keyString으로 key-value pair를 찾아 value를 반환한다.  static public String getValue(String dbName, String keyString)
   {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
@@ -190,7 +190,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     return result;
   }
 
-  static public void deleteKeyValue(String dbName, String keyString)
+  // dbName의 database를 열어서, keyString으로 key-value pair를 찾고 해당 pair를 삭제한다.  static public void deleteKeyValue(String dbName, String keyString)
   {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
@@ -220,7 +220,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     myDatabase.close();
   }
 
-  static public boolean keyListValidation(String dbName, String keyList, boolean addMsg)
+  // keyList로 받은 String은 여러 String 들이 " "로 구분되어있는 String 이다.  // keyArray의 원소들 중, dbName 이름의 database에 존재하지 않은 key가 있는지 찾는다.  // 하나라도 존재하지 않으면 false를 반환한다.   static public boolean keyListValidation(String dbName, String keyList, boolean addMsg)
   {
     String key;
     String [] keyArray = keyList.split(" ");
@@ -239,11 +239,11 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     return result;
   }
 
-  static public void setDefaultPkFk(String dbName)
+  // explicit한 primary key / foreign key 정의가 없을 때, table을 규격에 맞추기 위해 호출한다.  static public void setDefaultPkFk(String dbName)
   {
     if (!findKeyValue(dbName, "@PK"))
     {
-      Cursor cursor = null;
+      // create table query 내에 primary key 정의가 없는 경우이다.      Cursor cursor = null;
       myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
       cursor = myDatabase.openCursor(null, null);
       String totalKeyList = "";
@@ -252,21 +252,21 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
       do
       {
-        try
+        // table의 모든 key 값들을 순회하며, attribute에 PRI 속성을 부여한다.         try
         {
           String keyString = new String(foundKey.getData(), "UTF-8");
           String valueString = new String(foundValue.getData(), "UTF-8");
-          if(!keyString.substring(0,1).equals("@"))
+          // key 값들 중 @PK, @REFER, @REFERED 같은 애들은 건드리지 않기 위해 첫글자와 @를 비교한다.          if(!keyString.substring(0,1).equals("@"))
           {
             String[] valueArray = valueString.split(" ");
-            valueArray[2] = "N";
-            String newValueString = "";
+            // Attribute의 key-value pair에서 value는 "TYPE SIZE NULL ..." 의 양식을 따르므로,            // Split 후 3번째 원소가 nullable에 대한 Y/N 값이다.            // Primary key 를 이루는 attribute이므로 N으로 설정한다.            valueArray[2] = "N";
+            // 새로운 value string 을 newValueString 이라는 이름으로 만든다.            String newValueString = "";
             for(int j=0;j<valueArray.length;j++)
             {
               newValueString += (valueArray[j]+" ");
             }
-            newValueString += "PRI";
-            foundValue.setData(newValueString.getBytes());
+            // 끝에 "PRI"를 붙인다.            newValueString += "PRI";
+            // foundValue DatabaseEntry를 수정하고, table에 put.            foundValue.setData(newValueString.getBytes());
             cursor.put(foundKey, foundValue);
             totalKeyList += (keyString + " ");
           }
@@ -277,17 +277,17 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         }
       }
       while (cursor.getNext(foundKey, foundValue, LockMode.DEFAULT) == OperationStatus.SUCCESS);
-      totalKeyList = totalKeyList.substring(0, totalKeyList.length() - 1);
+      // @PK 값에는 primary key를 이루는 attribute set이 "attr1 attr2 ... attrn"처럼 " "으로 구분되어 합쳐져있다.      // 이를 @PK 를 key 로 하는 pair를 만들어 table에 넣는다.      totalKeyList = totalKeyList.substring(0, totalKeyList.length() - 1);
       cursor.close();
       myDatabase.close();
       putKeyValue(dbName, "@PK", totalKeyList);
     }
 
-    if(!findKeyValue(dbName,"@REFER")) putKeyValue(dbName, "@REFER", "");
+    // @REFER, @REFERED 의 값이 없다면 만들어준다.    if(!findKeyValue(dbName,"@REFER")) putKeyValue(dbName, "@REFER", "");
     putKeyValue(dbName, "@REFERED", "");
   }
 
-  static public boolean referencePkValidation(String dbName, String keyList)
+  // 참조받는 Table의 primary key와 참조하는 column set이 일치해야한다.  // String array comparison을 이용해서 쉽게 구현.  static public boolean referencePkValidation(String dbName, String keyList)
   {
     boolean result = false;
     String primaryKey = getValue(dbName, "@PK");
@@ -295,23 +295,23 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     String [] keyArray = keyList.split(" ");
     if (keyArray.length == primaryKeyArray.length)
     {
-      Arrays.sort(keyArray);
+      // 정확한 비교를 위해 우선 sorting      Arrays.sort(keyArray);
       Arrays.sort(primaryKeyArray);
       if (Arrays.equals(keyArray, primaryKeyArray)) result = true;
     }
     return result;
   }
 
-  static public boolean referenceDataTypeValidation(String dbName1, String keyList1, String dbName2, String keyList2)
+  // 참조받는 column set과 참조하는 column set의 type 및 size가 일치하는지 확인한다.  // 일치하면 true, 아니면 false를 반환한다.  static public boolean referenceDataTypeValidation(String dbName1, String keyList1, String dbName2, String keyList2)
   {
     boolean result = true;
     String [] keyArray1 = keyList1.split(" ");
     String [] keyArray2 = keyList2.split(" ");
-    if (keyArray1.length == keyArray2.length)
+    // 우선 column set의 크기가 같아야 한다.    if (keyArray1.length == keyArray2.length)
     {
       for (int i = 0; i < keyArray1.length; i++)
       {
-        String [] attrDataType1 = getValue(dbName1, keyArray1 [i]).split(" ");
+        // "TYPE SIZE ..."로 구성되므로, [0]: int/char/date [1]: size        // 두 가지를 체크해준다.        String [] attrDataType1 = getValue(dbName1, keyArray1 [i]).split(" ");
         String [] attrDataType2 = getValue(dbName2, keyArray2 [i]).split(" ");
         boolean typeMatch = attrDataType1 [0].equals(attrDataType2 [0]);
         boolean sizeMatch = attrDataType1 [1].equals(attrDataType2 [1]);
@@ -329,7 +329,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     return result;
   }
 
-  static public void addPrimaryKey(String dbName, String columnNameList)
+  // explicit 한 primary key declaration이 있는 경우에는,  // 해당 columns 들은 무조건 not nullable 로 지정하고,   // 해당 columns 들만 "PRI" 속성을 부여하기 위해 value 값에 뒤에 "PRI"를 덧붙인다.  static public void addPrimaryKey(String dbName, String columnNameList)
   {
     String[] columnNameArray = columnNameList.split(" ");
     Arrays.sort(columnNameArray);
@@ -351,7 +351,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     putKeyValue(dbName, "@PK", columnNameList);
   }
 
-  static public void addForeignKey(String referencingTable, String columnNameList, String referencedTable)
+  // reference 가 declaration된 경우,  // 참조하는 columns들의 key-value pair에서 value 뒤에 "FOR"을 덧붙이고,  // 참조하는 table의 @REFER key 값의 value를 갱신하고,  // 참조받는 table의 @REFERED key 값의 value를 갱신한다.  static public void addForeignKey(String referencingTable, String columnNameList, String referencedTable)
   {
     String currentRefered = getValue(referencedTable, "@REFERED");
     currentRefered += (referencingTable+" ");
@@ -371,11 +371,11 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
   }
 
-  static public void descTableList(String dbNameList)
+  // table1, table2, table3 ...로 요청된 table list들의 desc를 수행한다.  // * 이 요청된 경우 모두 출력해주고,  // table1, table2, ... 로 요청된 경우 우선 존재하는 table인지를 체크하고 모두 존재한다면 출력한다.  static public void descTableList(String dbNameList)
   {
     if(dbNameList.equals("*"))
     {
-      String totalTableList = getValue("@TABLELIST", "@ALL");
+      // totalTableList: "table1 table2 table3 ..."      String totalTableList = getValue("@TABLELIST", "@ALL");
       if (!totalTableList.equals(""))
       {
         String [] totalTableArray = totalTableList.split(" ");
@@ -392,7 +392,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       boolean isError = false;
       for (int i = 0; i < dbNameArray.length; i++)
       {
-        if (!findKeyValue("@TABLELIST", dbNameArray [i]))
+        // @TABLELIST에 존재하는 key 값이 아니라는 얘기는, 존재하지 않는 table이라는 의미이므로 error 발생이다.        if (!findKeyValue("@TABLELIST", dbNameArray [i]))
         {
           isError = true;
           break;
@@ -413,7 +413,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
   }
 
-  static public void descTable(String dbName)
+  // 단일 table 출력을 담당.  // destTableList에서 호출된다.  static public void descTable(String dbName)
   {
     Cursor cursor = null;
     myDatabase = myDbEnvironment.openDatabase(null, dbName, dbConfig);
@@ -422,7 +422,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     DatabaseEntry foundKey = new DatabaseEntry();
     DatabaseEntry foundValue = new DatabaseEntry();
 
-    cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
+    // table에는 @PK, @REFER, @REFERED 의 key를 가지고 있다.    // key들이 alphabetically ordered 되어있으므로, 첫 3개가 쟤네들에 해당.    // 그러므로 desc 에서 저 3개를 건너뛰고 시작한다.    cursor.getFirst(foundKey, foundValue, LockMode.DEFAULT);
     cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
     cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
     cursor.getNext(foundKey, foundValue, LockMode.DEFAULT);
@@ -438,7 +438,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
         String valueString = new String(foundValue.getData(), "UTF-8");
         String[] valueArray = valueString.split(" ");
 
-        if(valueArray[0].equals("char"))
+        // char인 경우 size가 의미가 있고,        // int / date의 경우 그냥 size를 0으로 해놨고 의미가 없으니 안써야한다.        if(valueArray[0].equals("char"))
         {
           System.out.print(keyString+"\u005ctchar("+valueArray[1]+")\u005ct"+valueArray[2]+"\u005ct");
         }
@@ -449,13 +449,13 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
         switch (valueArray.length)
         {
-          case 3 :
+          // 아무 key도 아님          case 3 :
                 System.out.println("");
                 break;
-          case 4 :
+          // PRI or FOR          case 4 :
                 System.out.println(valueArray[3]);
                 break;
-          case 5 :
+          // PRI and FOR          case 5 :
                 System.out.println(valueArray[3]+"\u005ct"+valueArray[4]);
                 break;
         }
@@ -495,25 +495,25 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       {
         if (findKeyValue("@TABLELIST", dbNameArray [i]))
         {
-          if (!getValue(dbNameArray [i], "@REFERED").equals(""))
+          // @REFERED 는 자신을 참조하는 Table 정보.          // 그러므로 @REFERED가 ""가 아니고 값이 있으면 drop 하지말아야 한다.          if (!getValue(dbNameArray [i], "@REFERED").equals(""))
           {
             System.out.println("Drop table has failed: '" + dbNameArray [i] + "'is referenced by other table");
           }
           else
           {
-            if(!getValue(dbNameArray[i], "@REFER").equals(""))
+            // @REFER는 내가 참조하는 테이블 정보.            // 그러므로 나를 Drop table 하면서, 내가 참조하는 테이블들의 @REFERED 에서 내 이름을 뺀다.            if(!getValue(dbNameArray[i], "@REFER").equals(""))
             {
               String referedList = getValue(dbNameArray[i], "@REFER");
               String[] referedArray = referedList.split(" ");
               for(int j=0;j<referedArray.length;j++)
               {
-                deletePartialValue(referedArray[j], "@REFERED", dbNameArray[i]);
+                // "table1 table2 ... tablen" 에서 table2를 지워 "table1 ... tablen" 으로 만드는 것같은 상황을 처리.                deletePartialValue(referedArray[j], "@REFERED", dbNameArray[i]);
               }
             }
 
             myDbEnvironment.removeDatabase(null, dbNameArray [i]);
-            deleteKeyValue("@TABLELIST", dbNameArray [i]);
-            deletePartialValue("@TABLELIST", "@ALL", dbNameArray[i]);
+            // @TABLELIST 에서 <tablename, "column1 column2 ... columnn" > pair를 삭제                        deleteKeyValue("@TABLELIST", dbNameArray [i]);
+            // @TABLELIST 의 @ALL 값이 "table1 table2 table3 ..." 인데,            // drop한 table을 빼준다.            deletePartialValue("@TABLELIST", "@ALL", dbNameArray[i]);
 
             System.out.println("'" + dbNameArray [i] + "' table is dropped");
           }
@@ -528,7 +528,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
 
   static public void addErrorMsg(String msg)
   {
-    if (errorMsg.equals(""))
+    // 첫 error messsge만 출력하기 위함.    if (errorMsg.equals(""))
     {
       errorMsg = msg;
     }
@@ -538,13 +538,13 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   {
     if(!tableName.equals("@TEMP"))
     {
-      String currentTableNameList = getValue("@TABLELIST","@ALL");
+      // @ALL 뒤에 table name을 덧붙인다.      String currentTableNameList = getValue("@TABLELIST","@ALL");
       String newTableNameList = currentTableNameList+tableName+" ";
       putKeyValue("@TABLELIST", "@ALL", newTableNameList);
     }
   }
 
-  static public void deletePartialValue(String dbName, String keyString, String valueToDelete)
+  // "value1 value2 value3 ..." 에서 value2를 지운다면 "value1 value3 ..."가 된다.  // 해당 작업을 위한 함수.  static public void deletePartialValue(String dbName, String keyString, String valueToDelete)
   {
     String valueList = getValue(dbName, keyString);
     String[] valueArray = valueList.split(" ");
@@ -631,7 +631,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       jj_consume_token(-1);
       throw new ParseException();
     }
-    {if (true) return q;}
+      {if (true) return q;}
     throw new Error("Missing return statement in function");
   }
 
@@ -640,6 +640,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     jj_consume_token(CREATE_TABLE);
     tableName = tableName();
     errorMsg = "";
+    // @TABLELIST에 존재하는 key라는 것은 이미 tableNAME의 table이 존재한다는 것
     if (findKeyValue("@TABLELIST", tableName))
     {
       addErrorMsg("Create table has failed: table with the same name already exists");
@@ -650,6 +651,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       currentTableName = tableName;
     }
     tableElementList(tableName);
+    // create table query의 grammar가 모두 지켜진 경우 해당 작업을 수행한다.
     setDefaultPkFk(currentTableName);
     addTableName(currentTableName);
   }
@@ -696,17 +698,20 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   boolean result;
     columnName = columnName();
     dataType = dataType();
+    // example: "int 0 Y" "char 10 Y"
     dataType += " Y";
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case NOT_NULL:
       jj_consume_token(NOT_NULL);
+      // example: "int 0 N" "char 10 N" 
       dataType = dataType.substring(0, dataType.length() - 1) + "N";
       break;
     default:
       jj_la1[5] = jj_gen;
       ;
     }
-    if (findKeyValue(currentTableName, dataType))
+    // table에 이미 선언된 columnName인지 확인한다.
+    if (findKeyValue(currentTableName, columnName))
     {
       addErrorMsg("Create table has failed: column definition is duplicated");
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
@@ -738,6 +743,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   String databaseName;
     jj_consume_token(PRIMARY_KEY);
     columnNameList = columnNameList();
+    // primary key 정의가 이미 있었다면, @PK 를 key로 하는 pair가 존재할 것.
     if (findKeyValue(currentTableName, "@PK"))
     {
       addErrorMsg("Create table has failed: primary key definition is duplicated");
@@ -746,6 +752,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
     else
     {
+      // 정의된 columns들 가지고 primary key를 구성했는지 체크한다.
       if (keyListValidation(currentTableName, columnNameList, true))
       {
         addPrimaryKey(currentTableName, columnNameList);
@@ -765,6 +772,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
   String databaseName;
     jj_consume_token(FOREIGN_KEY);
     referencingColumnNameList = columnNameList();
+    // 존재하는 columns 들 가지고 Foreign key를 구성했는지 체크한다.
     if (!keyListValidation(currentTableName, referencingColumnNameList, true))
     {
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
@@ -772,6 +780,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
     }
     jj_consume_token(REFERENCES);
     referencedTableName = tableName();
+    // 참조하려는 table이 존재하는 table인지 확인한다.
     if (!findKeyValue("@TABLELIST", referencedTableName))
     {
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
@@ -779,18 +788,21 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       currentTableName = "@TEMP";
     }
     referencedColumnNameList = columnNameList();
+    // 참조받을 columns들이 참조받을 table에 존재하는 columns들인가?
     if (!keyListValidation(referencedTableName, referencedColumnNameList, false))
     {
       addErrorMsg("Create table has failed: foreign key references non existing column");
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
       currentTableName = "@TEMP";
     }
+    // 참조받을 columns들이 primary key를 구성하는가?
     else if (!referencePkValidation(referencedTableName, referencedColumnNameList))
     {
       addErrorMsg("Create table has failed: foreign key references non primary key column");
       myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
       currentTableName = "@TEMP";
     }
+    // 참조하려는 columns들과 참조받을 columns들의 type이 일치하는가?
     else if (!referenceDataTypeValidation(currentTableName, referencingColumnNameList, referencedTableName, referencedColumnNameList))
     {
       addErrorMsg("Create table has failed: foreign key references wrong type");
@@ -843,6 +855,7 @@ public class SimpleDBMSParser implements SimpleDBMSParserConstants {
       intValue = Integer.parseInt(intValueToken.image);
       if (intValue < 1)
       {
+        // char(0), char(-1) 같은 경우 에러 발생
         addErrorMsg("Char length should be > 0");
         myDbEnvironment.renameDatabase(null, currentTableName, "@TEMP");
         currentTableName = "@TEMP";
