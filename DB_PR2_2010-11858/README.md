@@ -21,5 +21,9 @@
 
 #실행방법
 
+1. AdmissionSystem.jar 파일을 클릭 > View Raw를 클릭해서 다운로드
+2. 다운로드한 디렉토리에서 명령 프롬포트 (혹은 터미널) 실행
+3. `java -jar AdmissionSystem.jar`로 프로그램 실행
+
 
 
